@@ -15,8 +15,10 @@ type FollowUp = "green" | "yellow" | null;
 type Toast = { message: string; undo?: RatingReceipt };
 
 // Green / Yellow / Red rating row for a player profile. Green and Yellow open
-// a follow-up sheet; Red archives right away. Every rating can be undone,
-// from the sheet (Green/Yellow) or the confirmation toast (Red).
+// a follow-up sheet; Red archives right away. Ratings made during this visit
+// can be undone one step at a time, from the sheet (Green/Yellow) or the
+// toast (Red). Tapping the current color reopens its sheet/toast instead of
+// saving a duplicate rating.
 export function RatingButtons({
   playerId,
   rating,
@@ -28,8 +30,13 @@ export function RatingButtons({
   const [pending, startTransition] = useTransition();
   const [followUp, setFollowUp] = useState<FollowUp>(null);
   const [toast, setToast] = useState<Toast | null>(null);
-  const [receipt, setReceipt] = useState<RatingReceipt | null>(null);
+  // Ratings made during this visit, newest last; Undo reverses the newest.
+  const [history, setHistory] = useState<RatingReceipt[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  const latest = history.at(-1);
+  // The newest rating from this visit, if it's for the given color.
+  const undoableFor = (color: TrafficLight) => (latest?.rating === color ? latest : undefined);
 
   useEffect(() => {
     if (!toast) return;
@@ -38,45 +45,75 @@ export function RatingButtons({
     return () => clearTimeout(timeout);
   }, [toast]);
 
+  // Shows a color's follow-up again without saving anything.
+  function reopen(color: TrafficLight, receipt?: RatingReceipt) {
+    if (color === "red") setToast({ message: "Archived / Pass", undo: receipt });
+    else setFollowUp(color);
+  }
+
   function rate(next: TrafficLight) {
     setError(null);
+    if (next === rating) {
+      reopen(next, undoableFor(next));
+      return;
+    }
     startTransition(async () => {
       setOptimisticRating(next);
-      let result: RatingReceipt;
+      let receipt: RatingReceipt | null;
       try {
-        result = await ratePlayer(playerId, next);
+        receipt = await ratePlayer(playerId, next);
       } catch {
         setError("Couldn't save the rating. Check your connection and try again.");
         return;
       }
-      if (next === "red") {
-        setToast({ message: "Moved to Archived / Pass", undo: result });
-      } else {
-        setReceipt(result);
-        setFollowUp(next);
+      if (!receipt) {
+        // Already had this rating (e.g. a double tap); nothing new was saved.
+        reopen(next, undoableFor(next));
+        return;
       }
+      setHistory((h) => [...h, receipt]);
+      if (next === "red") setToast({ message: "Moved to Archived / Pass", undo: receipt });
+      else setFollowUp(next);
     });
   }
 
-  function undo(toUndo: RatingReceipt) {
+  function undo(receipt: RatingReceipt) {
     setError(null);
     startTransition(async () => {
       try {
-        await undoRating(playerId, toUndo);
+        await undoRating(playerId, receipt);
       } catch {
-        setError("Couldn't undo. Try again.");
+        setError("Couldn't undo. Refresh the page and try again.");
         return;
       }
+      setHistory((h) => h.filter((r) => r.evaluationId !== receipt.evaluationId));
       setFollowUp(null);
-      setReceipt(null);
       setToast({ message: "Rating undone" });
     });
   }
 
-  function followUpAction(action: (() => Promise<void>) | null, message: string | null) {
+  // Runs a follow-up and records what it changed so Undo can reverse it too.
+  function followUpAction(kind: "outreach" | "film" | null, message: string | null) {
+    const color: TrafficLight = kind === "outreach" ? "green" : "yellow";
     startTransition(async () => {
       try {
-        if (action) await action();
+        if (kind) {
+          const result =
+            kind === "outreach"
+              ? await queueForOutreach(playerId)
+              : { status: undefined, ...(await requestFilmAndInfo(playerId)) };
+          setHistory((h) =>
+            h.map((r, i) =>
+              i === h.length - 1 && r.rating === color
+                ? {
+                    ...r,
+                    expectedStatus: result.status ?? r.expectedStatus,
+                    taskIds: result.taskId ? [...r.taskIds, result.taskId] : r.taskIds,
+                  }
+                : r,
+            ),
+          );
+        }
       } catch {
         setError("Couldn't save that. Try again.");
         return;
@@ -124,7 +161,7 @@ export function RatingButtons({
                 variant="primary"
                 disabled={pending}
                 onClick={() =>
-                  followUpAction(() => queueForOutreach(playerId), "Queued for outreach")
+                  followUpAction("outreach", "Queued for outreach")
                 }
               >
                 Queue for Outreach
@@ -132,7 +169,9 @@ export function RatingButtons({
               <SheetButton disabled={pending} onClick={() => setFollowUp(null)}>
                 Not now
               </SheetButton>
-              {receipt && <UndoLink disabled={pending} onClick={() => undo(receipt)} />}
+              {undoableFor("green") && (
+                <UndoLink disabled={pending} onClick={() => undo(undoableFor("green")!)} />
+              )}
             </>
           ) : (
             <>
@@ -145,7 +184,7 @@ export function RatingButtons({
                 variant="primary"
                 disabled={pending}
                 onClick={() =>
-                  followUpAction(() => requestFilmAndInfo(playerId), "Film & info request saved")
+                  followUpAction("film", "Film & info request saved")
                 }
               >
                 Request Film &amp; Info
@@ -153,7 +192,9 @@ export function RatingButtons({
               <SheetButton disabled={pending} onClick={() => followUpAction(null, null)}>
                 Watch Again
               </SheetButton>
-              {receipt && <UndoLink disabled={pending} onClick={() => undo(receipt)} />}
+              {undoableFor("yellow") && (
+                <UndoLink disabled={pending} onClick={() => undo(undoableFor("yellow")!)} />
+              )}
             </>
           )}
         </Sheet>

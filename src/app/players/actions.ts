@@ -119,15 +119,28 @@ const STATUS_FOR_RATING: Partial<Record<TrafficLight, LifecycleStatus>> = {
   red: "archived",
 };
 
+// Everything needed to reverse one rating and its follow-up, kept by the
+// browser for the rest of the visit.
 export type RatingReceipt = {
   evaluationId: string;
+  rating: TrafficLight;
+  // Status before the rating.
   previousStatus: LifecycleStatus;
+  // Status the app last set for this rating (after any follow-up). Undo only
+  // restores previousStatus if nobody has changed the status since.
+  expectedStatus: LifecycleStatus;
+  // Tasks the rating's follow-up created, removed on undo.
+  taskIds: string[];
 };
 
 // Records a rating as a new evaluation, stores it on the player as their
 // latest rating, and moves Yellow/Red players to their next stage. Returns
-// what undoRating needs to reverse it.
-export async function ratePlayer(playerId: string, rating: TrafficLight): Promise<RatingReceipt> {
+// what undoRating needs to reverse it, or null when the player already has
+// this rating (tapping the current color never saves a duplicate).
+export async function ratePlayer(
+  playerId: string,
+  rating: TrafficLight,
+): Promise<RatingReceipt | null> {
   if (!isTrafficLight(rating)) {
     throw new Error("Invalid rating");
   }
@@ -136,10 +149,11 @@ export async function ratePlayer(playerId: string, rating: TrafficLight): Promis
 
   const { data: player, error: playerError } = await supabase
     .from("players")
-    .select("lifecycle_status")
+    .select("lifecycle_status, traffic_light")
     .eq("id", playerId)
-    .single<{ lifecycle_status: LifecycleStatus }>();
+    .single<{ lifecycle_status: LifecycleStatus; traffic_light: TrafficLight | null }>();
   if (playerError) throw new Error(playerError.message);
+  if (player.traffic_light === rating) return null;
 
   const { data: evaluation, error: evalError } = await supabase
     .from("evaluations")
@@ -156,16 +170,25 @@ export async function ratePlayer(playerId: string, rating: TrafficLight): Promis
   if (error) throw new Error(error.message);
 
   revalidatePlayer(playerId);
-  return { evaluationId: evaluation.id, previousStatus: player.lifecycle_status };
+  return {
+    evaluationId: evaluation.id,
+    rating,
+    previousStatus: player.lifecycle_status,
+    expectedStatus: status ?? player.lifecycle_status,
+    taskIds: [],
+  };
 }
 
-// Reverses a rating made by mistake: deletes that evaluation, falls back to
-// the player's previous rating, and restores their status if the rating
-// changed it (and nobody has changed it again since).
+// Reverses a rating and its follow-up: deletes that evaluation and any task
+// the follow-up created, falls back to the player's previous rating (or none),
+// and restores their previous status if nobody has changed it since.
 export async function undoRating(playerId: string, receipt: RatingReceipt) {
-  if (!isLifecycleStatus(receipt.previousStatus)) {
+  if (!isLifecycleStatus(receipt.previousStatus) || !isLifecycleStatus(receipt.expectedStatus)) {
     throw new Error("Invalid status");
   }
+  const taskIds = Array.isArray(receipt.taskIds)
+    ? receipt.taskIds.filter((id) => typeof id === "string").slice(0, 5)
+    : [];
 
   const supabase = await createAuthedClient();
 
@@ -174,10 +197,19 @@ export async function undoRating(playerId: string, receipt: RatingReceipt) {
     .delete()
     .eq("id", receipt.evaluationId)
     .eq("player_id", playerId)
-    .select("traffic_light_rating")
-    .maybeSingle<{ traffic_light_rating: TrafficLight | null }>();
+    .select("id");
   if (deleteError) throw new Error(deleteError.message);
-  if (!deleted) return; // Already undone.
+  if (!deleted?.length) throw new Error("This rating was already undone or can't be undone.");
+
+  if (taskIds.length > 0) {
+    const { error: taskError } = await supabase
+      .from("tasks")
+      .delete()
+      .in("id", taskIds)
+      .eq("player_id", playerId)
+      .eq("status", "open");
+    if (taskError) throw new Error(taskError.message);
+  }
 
   const [{ data: latest, error: latestError }, { data: player, error: playerError }] =
     await Promise.all([
@@ -198,10 +230,7 @@ export async function undoRating(playerId: string, receipt: RatingReceipt) {
   if (latestError) throw new Error(latestError.message);
   if (playerError) throw new Error(playerError.message);
 
-  const statusSetByRating = deleted.traffic_light_rating
-    ? STATUS_FOR_RATING[deleted.traffic_light_rating]
-    : undefined;
-  const restoreStatus = statusSetByRating && player.lifecycle_status === statusSetByRating;
+  const restoreStatus = player.lifecycle_status === receipt.expectedStatus;
 
   const { error } = await supabase
     .from("players")
@@ -215,7 +244,7 @@ export async function undoRating(playerId: string, receipt: RatingReceipt) {
   revalidatePlayer(playerId);
 }
 
-// Green follow-up: "Queue for Outreach".
+// Green follow-up: "Queue for Outreach". Returns what undo needs.
 export async function queueForOutreach(playerId: string) {
   const supabase = await createAuthedClient();
 
@@ -225,23 +254,30 @@ export async function queueForOutreach(playerId: string) {
     .eq("id", playerId);
   if (error) throw new Error(error.message);
 
-  await addOpenTask(supabase, playerId, "outreach");
+  const taskId = await addOpenTask(supabase, playerId, "outreach");
   revalidatePlayer(playerId);
+  return { status: "to_be_contacted" as LifecycleStatus, taskId };
 }
 
 // Yellow follow-up: "Request Film & Info". Saved as an open task for now;
 // sending the actual request comes later.
 export async function requestFilmAndInfo(playerId: string) {
   const supabase = await createAuthedClient();
-  await addOpenTask(supabase, playerId, "request_film");
+  const taskId = await addOpenTask(supabase, playerId, "request_film");
   revalidatePlayer(playerId);
+  return { taskId };
 }
 
 type Supabase = Awaited<ReturnType<typeof createAuthedClient>>;
 
 // Adds an open task unless the player already has an open one of that type,
-// so repeat taps don't pile up duplicates.
-async function addOpenTask(supabase: Supabase, playerId: string, taskType: TaskType) {
+// so repeat taps don't pile up duplicates. Returns the new task's id, or null
+// if one already existed.
+async function addOpenTask(
+  supabase: Supabase,
+  playerId: string,
+  taskType: TaskType,
+): Promise<string | null> {
   const { data: existing, error: findError } = await supabase
     .from("tasks")
     .select("id")
@@ -250,12 +286,15 @@ async function addOpenTask(supabase: Supabase, playerId: string, taskType: TaskT
     .eq("status", "open")
     .limit(1);
   if (findError) throw new Error(findError.message);
-  if (existing.length > 0) return;
+  if (existing.length > 0) return null;
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("tasks")
-    .insert({ player_id: playerId, task_type: taskType });
+    .insert({ player_id: playerId, task_type: taskType })
+    .select("id")
+    .single();
   if (error) throw new Error(error.message);
+  return data.id;
 }
 
 function revalidatePlayer(playerId: string) {
