@@ -8,10 +8,14 @@ const tabs = [
   { href: "/coaches", label: "Coaches", icon: "📇" },
 ];
 
-// Top bar on larger screens, iOS-style bottom tab bar on phones.
-export function AppNav({ staffName }: { staffName: string | null }) {
+// Top bar on larger screens, iOS-style bottom tab bar on phones. The Profile
+// tab (with Sign out) is always shown whenever someone is signed in.
+export function AppNav({ userName }: { userName: string | null }) {
   const pathname = usePathname();
   if (pathname.startsWith("/login")) return null;
+
+  const initial = userName?.[0]?.toUpperCase() ?? "?";
+  const profileActive = pathname.startsWith("/profile");
 
   return (
     <>
@@ -20,39 +24,22 @@ export function AppNav({ staffName }: { staffName: string | null }) {
           <Link href="/" className="text-lg font-semibold tracking-tight">
             💼 Briefcase
           </Link>
-          <div className="flex items-center gap-1">
-            <nav className="hidden gap-1 sm:flex">
-              {tabs.map((tab) => {
-                const active = pathname.startsWith(tab.href);
-                return (
-                  <Link
-                    key={tab.href}
-                    href={tab.href}
-                    className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-                      active
-                        ? "bg-foreground text-background"
-                        : "text-muted hover:bg-surface-muted"
-                    }`}
-                  >
-                    {tab.label}
-                  </Link>
-                );
-              })}
-            </nav>
-            {staffName && (
-              <Link
-                href="/account"
-                  className={`ml-1 flex items-center gap-2 rounded-full py-1 pr-3 pl-1 text-sm font-medium transition-colors ${
-                  pathname.startsWith("/account") ? "bg-surface-muted" : "hover:bg-surface-muted"
-                }`}
-              >
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-foreground">
-                  {staffName[0]?.toUpperCase()}
-                </span>
-                <span className="max-w-28 truncate">{staffName.split(" ")[0]}</span>
-              </Link>
-            )}
-          </div>
+          <nav className="hidden gap-1 sm:flex">
+            {[...tabs, { href: "/profile", label: "Profile" }].map((tab) => {
+              const active = pathname.startsWith(tab.href);
+              return (
+                <Link
+                  key={tab.href}
+                  href={tab.href}
+                  className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+                    active ? "bg-foreground text-background" : "text-muted hover:bg-surface-muted"
+                  }`}
+                >
+                  {tab.label}
+                </Link>
+              );
+            })}
+          </nav>
         </div>
       </header>
 
@@ -73,6 +60,21 @@ export function AppNav({ staffName }: { staffName: string | null }) {
               </Link>
             );
           })}
+          <Link
+            href="/profile"
+            className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-xs font-medium ${
+              profileActive ? "text-accent" : "text-muted"
+            }`}
+          >
+            <span
+              className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] leading-none font-semibold ${
+                profileActive ? "bg-accent text-accent-foreground" : "bg-muted text-background"
+              }`}
+            >
+              {initial}
+            </span>
+            Profile
+          </Link>
         </div>
       </nav>
     </>
