@@ -20,6 +20,7 @@ export type Player = {
   id: string;
   first_name: string;
   last_name: string;
+  jersey_number: string | null;
   grad_year: number | null;
   position: string | null;
   club_team: string | null;

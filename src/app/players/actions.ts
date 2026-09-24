@@ -60,6 +60,11 @@ function parsePlayer(formData: FormData) {
     fieldErrors.gpa = "GPA must be between 0 and 5";
   }
 
+  const jersey_number = text(formData, "jersey_number")?.replace(/^#/, "") ?? null;
+  if (jersey_number && jersey_number.length > 10) {
+    fieldErrors.jersey_number = "Keep it under 10 characters";
+  }
+
   const email = text(formData, "email");
   if (email && !isEmail(email)) {
     fieldErrors.email = "Enter a valid email";
@@ -68,6 +73,7 @@ function parsePlayer(formData: FormData) {
   const row = {
     first_name: first_name ?? "",
     last_name: last_name ?? "",
+    jersey_number,
     grad_year,
     gpa,
     email,

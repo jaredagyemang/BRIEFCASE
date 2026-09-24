@@ -82,6 +82,7 @@ export default async function PlayerPage({ params }: PageProps<"/players/[id]">)
   const latestLight = TRAFFIC_LIGHTS.find((l) => l.value === player.traffic_light);
 
   const details = [
+    { label: "Jersey", value: player.jersey_number && `#${player.jersey_number}` },
     { label: "Grad year", value: player.grad_year },
     { label: "Position", value: player.position },
     { label: "Club team", value: player.club_team },
