@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { signOut } from "@/app/login/actions";
 
 const tabs = [
   { href: "/players", label: "Players", icon: "🏃" },
@@ -11,6 +12,7 @@ const tabs = [
 // Top bar on larger screens, iOS-style bottom tab bar on phones.
 export function AppNav() {
   const pathname = usePathname();
+  if (pathname.startsWith("/login")) return null;
 
   return (
     <>
@@ -19,6 +21,7 @@ export function AppNav() {
           <Link href="/" className="text-lg font-semibold tracking-tight">
             💼 Briefcase
           </Link>
+          <div className="flex items-center gap-1">
           <nav className="hidden gap-1 sm:flex">
             {tabs.map((tab) => {
               const active = pathname.startsWith(tab.href);
@@ -37,6 +40,12 @@ export function AppNav() {
               );
             })}
           </nav>
+          <form action={signOut}>
+            <button type="submit" className="rounded-full px-3 py-1.5 text-sm text-muted hover:bg-surface-muted">
+              Sign out
+            </button>
+          </form>
+          </div>
         </div>
       </header>
 
