@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAuthedClient } from "@/lib/supabase/server";
+import { duplicateKey, type DuplicateMatch } from "@/lib/duplicates";
+import { findMatchingPlayers } from "@/lib/duplicates-server";
 import { invalid, isEmail, submittedValues, text, type FormState } from "@/lib/form";
 import {
   isLifecycleStatus,
@@ -12,7 +14,30 @@ import {
   type TrafficLight,
 } from "@/lib/players";
 
-export type PlayerFormState = FormState;
+export type PlayerFormState =
+  | (NonNullable<FormState> & {
+      // Set when the player looks like someone already saved; the form asks
+      // whether to save anyway.
+      duplicates?: DuplicateMatch[];
+    })
+  | undefined;
+
+// Returns a "possible duplicate" response unless the person already chose
+// "Save anyway" for exactly these matches.
+async function checkDuplicates(
+  supabase: Awaited<ReturnType<typeof createAuthedClient>>,
+  row: { first_name: string; last_name: string; grad_year: number | null },
+  formData: FormData,
+  excludeId?: string,
+): Promise<PlayerFormState | null> {
+  const matches = await findMatchingPlayers(supabase, row, excludeId);
+  if (matches.length === 0) return null;
+
+  const confirmed = new Set(String(formData.get("confirm_duplicates") ?? "").split(",").filter(Boolean));
+  if (matches.every((m) => confirmed.has(m.id))) return null;
+
+  return { error: "", duplicates: matches, values: submittedValues(formData) };
+}
 
 // Turns form fields into a players row, or returns per-field errors.
 function parsePlayer(formData: FormData) {
@@ -64,6 +89,9 @@ export async function createPlayer(
   }
 
   const supabase = await createAuthedClient();
+  const duplicate = await checkDuplicates(supabase, row, formData);
+  if (duplicate) return duplicate;
+
   const { data, error } = await supabase
     .from("players")
     .insert(row)
@@ -87,6 +115,19 @@ export async function updatePlayer(
   }
 
   const supabase = await createAuthedClient();
+
+  // Only warn when this edit changes the name or grad year; otherwise any
+  // match was already there (and already flagged on the player list).
+  const { data: saved } = await supabase
+    .from("players")
+    .select("first_name, last_name, grad_year")
+    .eq("id", id)
+    .single<{ first_name: string; last_name: string; grad_year: number | null }>();
+  if (!saved || duplicateKey(saved) !== duplicateKey(row)) {
+    const duplicate = await checkDuplicates(supabase, row, formData, id);
+    if (duplicate) return duplicate;
+  }
+
   const { error } = await supabase.from("players").update(row).eq("id", id);
   if (error) return { error: error.message, values: submittedValues(formData) };
 

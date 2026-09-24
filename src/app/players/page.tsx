@@ -8,6 +8,7 @@ import {
   type Player,
 } from "@/lib/players";
 import { StatusPill } from "@/components/status-pill";
+import { describePlayer, duplicateIds } from "@/lib/duplicates";
 import { SearchBox } from "@/components/search-box";
 
 type ListPlayer = Pick<
@@ -19,8 +20,18 @@ export default async function PlayersPage({ searchParams }: PageProps<"/players"
   const params = await searchParams;
   const q = typeof params.q === "string" ? params.q : "";
   const status = isLifecycleStatus(params.status) ? params.status : null;
+  const showDuplicates = params.status === "duplicates";
 
   const supabase = await createClient();
+
+  // Possible duplicates across every player (any status), so past duplicates
+  // are flagged even when they're not in the current view.
+  const { data: allPlayers } = await supabase
+    .from("players")
+    .select("id, first_name, last_name, grad_year")
+    .returns<Pick<Player, "id" | "first_name" | "last_name" | "grad_year">[]>();
+  const duplicates = duplicateIds(allPlayers ?? []);
+
   let query = supabase
     .from("players")
     .select("id, first_name, last_name, grad_year, position, club_team, lifecycle_status, traffic_light")
@@ -29,7 +40,9 @@ export default async function PlayersPage({ searchParams }: PageProps<"/players"
     .limit(500);
 
   // Default view hides archived players; pick the Archived chip to see them.
-  query = status ? query.eq("lifecycle_status", status) : query.neq("lifecycle_status", "archived");
+  // The Duplicates chip shows every flagged player, archived or not.
+  if (showDuplicates) query = query.in("id", [...duplicates]);
+  else query = status ? query.eq("lifecycle_status", status) : query.neq("lifecycle_status", "archived");
 
   // Strip characters that have meaning in PostgREST filter syntax.
   const term = q.replace(/[%,()*\\]/g, " ").trim();
@@ -41,8 +54,17 @@ export default async function PlayersPage({ searchParams }: PageProps<"/players"
     );
   }
 
-  const { data, error } = await query.returns<ListPlayer[]>();
+  const { data, error } =
+    showDuplicates && duplicates.size === 0
+      ? { data: [], error: null }
+      : await query.returns<ListPlayer[]>();
   const players = data ?? [];
+  const selectedChip = showDuplicates ? "duplicates" : status;
+  const chips = [
+    { value: null, label: "Active" },
+    ...(duplicates.size > 0 ? [{ value: "duplicates", label: `⚠️ Duplicates (${duplicates.size})` }] : []),
+    ...LIFECYCLE_STATUSES,
+  ];
 
   function chipHref(value: string | null) {
     const next = new URLSearchParams();
@@ -71,8 +93,8 @@ export default async function PlayersPage({ searchParams }: PageProps<"/players"
       </div>
 
       <div className="-mx-4 mt-3 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
-        {[{ value: null, label: "Active" }, ...LIFECYCLE_STATUSES].map((chip) => {
-          const active = chip.value === status;
+        {chips.map((chip) => {
+          const active = chip.value === selectedChip;
           return (
             <Link
               key={chip.value ?? "active"}
@@ -93,9 +115,9 @@ export default async function PlayersPage({ searchParams }: PageProps<"/players"
       ) : players.length === 0 ? (
         <div className="mt-6 rounded-3xl bg-surface p-10 text-center">
           <p className="text-4xl">🏃</p>
-          <p className="mt-3 font-semibold">{q || status ? "No matching players" : "No players yet"}</p>
+          <p className="mt-3 font-semibold">{q || selectedChip ? "No matching players" : "No players yet"}</p>
           <p className="mt-1 text-sm text-muted">
-            {q || status ? "Try a different search or filter." : "Add your first recruit to get started."}
+            {q || selectedChip ? "Try a different search or filter." : "Add your first recruit to get started."}
           </p>
         </div>
       ) : (
@@ -120,10 +142,16 @@ export default async function PlayersPage({ searchParams }: PageProps<"/players"
                     {p.first_name} {p.last_name}
                   </p>
                   <p className="truncate text-sm text-muted">
-                    {[p.grad_year && `'${String(p.grad_year).slice(-2)}`, p.position, p.club_team]
-                      .filter(Boolean)
-                      .join(" · ") || "No details yet"}
+                    {describePlayer(p) || "No details yet"}
                   </p>
+                  {duplicates.has(p.id) && (
+                    <span
+                      title="Possible duplicate: same name and grad year as another player"
+                      className="mt-1 inline-block rounded-full bg-yellow/15 px-2 py-0.5 text-xs font-semibold whitespace-nowrap text-yellow-700 dark:text-yellow"
+                    >
+                      ⚠️ Duplicate?
+                    </span>
+                  )}
                 </div>
                 <StatusPill status={p.lifecycle_status} />
               </Link>
