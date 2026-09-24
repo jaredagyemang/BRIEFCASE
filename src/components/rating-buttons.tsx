@@ -2,12 +2,20 @@
 
 import { useEffect, useOptimistic, useState, useTransition } from "react";
 import { TRAFFIC_LIGHTS, type TrafficLight } from "@/lib/players";
-import { queueForOutreach, ratePlayer, requestFilmAndInfo } from "@/app/players/actions";
+import {
+  queueForOutreach,
+  ratePlayer,
+  requestFilmAndInfo,
+  undoRating,
+  type RatingReceipt,
+} from "@/app/players/actions";
 
 type FollowUp = "green" | "yellow" | null;
+type Toast = { message: string; undo?: RatingReceipt };
 
 // Green / Yellow / Red rating row for a player profile. Green and Yellow open
-// a follow-up sheet; Red archives right away and shows a short confirmation.
+// a follow-up sheet; Red archives right away. Every rating can be undone,
+// from the sheet (Green/Yellow) or the confirmation toast (Red).
 export function RatingButtons({
   playerId,
   rating,
@@ -18,12 +26,14 @@ export function RatingButtons({
   const [optimisticRating, setOptimisticRating] = useOptimistic(rating);
   const [pending, startTransition] = useTransition();
   const [followUp, setFollowUp] = useState<FollowUp>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
+  const [receipt, setReceipt] = useState<RatingReceipt | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!toast) return;
-    const timeout = setTimeout(() => setToast(null), 2500);
+    // Leave undoable toasts up longer so there's time to reach the button.
+    const timeout = setTimeout(() => setToast(null), toast.undo ? 6000 : 2500);
     return () => clearTimeout(timeout);
   }, [toast]);
 
@@ -31,14 +41,34 @@ export function RatingButtons({
     setError(null);
     startTransition(async () => {
       setOptimisticRating(next);
+      let result: RatingReceipt;
       try {
-        await ratePlayer(playerId, next);
+        result = await ratePlayer(playerId, next);
       } catch {
         setError("Couldn't save the rating. Check your connection and try again.");
         return;
       }
-      if (next === "red") setToast("Moved to Archived / Pass");
-      else setFollowUp(next);
+      if (next === "red") {
+        setToast({ message: "Moved to Archived / Pass", undo: result });
+      } else {
+        setReceipt(result);
+        setFollowUp(next);
+      }
+    });
+  }
+
+  function undo(toUndo: RatingReceipt) {
+    setError(null);
+    startTransition(async () => {
+      try {
+        await undoRating(playerId, toUndo);
+      } catch {
+        setError("Couldn't undo. Try again.");
+        return;
+      }
+      setFollowUp(null);
+      setReceipt(null);
+      setToast({ message: "Rating undone" });
     });
   }
 
@@ -51,7 +81,7 @@ export function RatingButtons({
         return;
       }
       setFollowUp(null);
-      if (message) setToast(message);
+      if (message) setToast({ message });
     });
   }
 
@@ -101,6 +131,7 @@ export function RatingButtons({
               <SheetButton disabled={pending} onClick={() => setFollowUp(null)}>
                 Not now
               </SheetButton>
+              {receipt && <UndoLink disabled={pending} onClick={() => undo(receipt)} />}
             </>
           ) : (
             <>
@@ -121,6 +152,7 @@ export function RatingButtons({
               <SheetButton disabled={pending} onClick={() => followUpAction(null, null)}>
                 Watch Again
               </SheetButton>
+              {receipt && <UndoLink disabled={pending} onClick={() => undo(receipt)} />}
             </>
           )}
         </FollowUpSheet>
@@ -131,8 +163,20 @@ export function RatingButtons({
           role="status"
           className="fixed inset-x-0 bottom-24 z-40 flex justify-center px-4 sm:bottom-8"
         >
-          <div className="rounded-full bg-foreground px-5 py-3 text-sm font-medium text-background shadow-lg">
-            {toast}
+          <div className="flex items-center gap-4 rounded-full bg-foreground py-3 pr-3 pl-5 text-sm font-medium text-background shadow-lg">
+            {toast.message}
+            {toast.undo ? (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => toast.undo && undo(toast.undo)}
+                className="rounded-full bg-background/20 px-4 py-1.5 font-semibold disabled:opacity-60"
+              >
+                Undo
+              </button>
+            ) : (
+              <span className="pr-2" />
+            )}
           </div>
         </div>
       )}
@@ -164,6 +208,19 @@ function FollowUpSheet({ children, onClose }: { children: React.ReactNode; onClo
         {children}
       </div>
     </div>
+  );
+}
+
+function UndoLink({ onClick, disabled }: { onClick: () => void; disabled: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="w-full py-2 text-sm font-medium text-muted disabled:opacity-60"
+    >
+      Undo rating
+    </button>
   );
 }
 

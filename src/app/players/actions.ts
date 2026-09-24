@@ -138,24 +138,96 @@ const STATUS_FOR_RATING: Partial<Record<TrafficLight, LifecycleStatus>> = {
   red: "archived",
 };
 
+export type RatingReceipt = {
+  evaluationId: string;
+  previousStatus: LifecycleStatus;
+};
+
 // Records a rating as a new evaluation, stores it on the player as their
-// latest rating, and moves Yellow/Red players to their next stage.
-export async function ratePlayer(playerId: string, rating: TrafficLight) {
+// latest rating, and moves Yellow/Red players to their next stage. Returns
+// what undoRating needs to reverse it.
+export async function ratePlayer(playerId: string, rating: TrafficLight): Promise<RatingReceipt> {
   if (!isTrafficLight(rating)) {
     throw new Error("Invalid rating");
   }
 
   const supabase = await createAuthedClient();
 
-  const { error: evalError } = await supabase
+  const { data: player, error: playerError } = await supabase
+    .from("players")
+    .select("lifecycle_status")
+    .eq("id", playerId)
+    .single<{ lifecycle_status: LifecycleStatus }>();
+  if (playerError) throw new Error(playerError.message);
+
+  const { data: evaluation, error: evalError } = await supabase
     .from("evaluations")
-    .insert({ player_id: playerId, traffic_light_rating: rating });
+    .insert({ player_id: playerId, traffic_light_rating: rating })
+    .select("id")
+    .single();
   if (evalError) throw new Error(evalError.message);
 
   const status = STATUS_FOR_RATING[rating];
   const { error } = await supabase
     .from("players")
     .update({ traffic_light: rating, ...(status && { lifecycle_status: status }) })
+    .eq("id", playerId);
+  if (error) throw new Error(error.message);
+
+  revalidatePlayer(playerId);
+  return { evaluationId: evaluation.id, previousStatus: player.lifecycle_status };
+}
+
+// Reverses a rating made by mistake: deletes that evaluation, falls back to
+// the player's previous rating, and restores their status if the rating
+// changed it (and nobody has changed it again since).
+export async function undoRating(playerId: string, receipt: RatingReceipt) {
+  if (!isLifecycleStatus(receipt.previousStatus)) {
+    throw new Error("Invalid status");
+  }
+
+  const supabase = await createAuthedClient();
+
+  const { data: deleted, error: deleteError } = await supabase
+    .from("evaluations")
+    .delete()
+    .eq("id", receipt.evaluationId)
+    .eq("player_id", playerId)
+    .select("traffic_light_rating")
+    .maybeSingle<{ traffic_light_rating: TrafficLight | null }>();
+  if (deleteError) throw new Error(deleteError.message);
+  if (!deleted) return; // Already undone.
+
+  const [{ data: latest, error: latestError }, { data: player, error: playerError }] =
+    await Promise.all([
+      supabase
+        .from("evaluations")
+        .select("traffic_light_rating")
+        .eq("player_id", playerId)
+        .not("traffic_light_rating", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle<{ traffic_light_rating: TrafficLight }>(),
+      supabase
+        .from("players")
+        .select("lifecycle_status")
+        .eq("id", playerId)
+        .single<{ lifecycle_status: LifecycleStatus }>(),
+    ]);
+  if (latestError) throw new Error(latestError.message);
+  if (playerError) throw new Error(playerError.message);
+
+  const statusSetByRating = deleted.traffic_light_rating
+    ? STATUS_FOR_RATING[deleted.traffic_light_rating]
+    : undefined;
+  const restoreStatus = statusSetByRating && player.lifecycle_status === statusSetByRating;
+
+  const { error } = await supabase
+    .from("players")
+    .update({
+      traffic_light: latest?.traffic_light_rating ?? null,
+      ...(restoreStatus && { lifecycle_status: receipt.previousStatus }),
+    })
     .eq("id", playerId);
   if (error) throw new Error(error.message);
 
