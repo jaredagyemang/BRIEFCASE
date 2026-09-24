@@ -397,9 +397,8 @@ export function RosterScanner() {
                   value={it.row.gpa}
                   onChange={(e) => updateRow(it.id, "gpa", e.target.value)}
                   aria-label={`Row ${index + 1} GPA`}
-                  placeholder="GPA"
-                  inputMode="decimal"
-                  className={`${cellClass} w-24 shrink-0 ${it.row.gpa_note ? "border-yellow" : ""}`}
+                  placeholder="GPA or %"
+                  className={`${cellClass} w-28 shrink-0 ${it.row.gpa_note ? "border-yellow" : ""}`}
                 />
               </div>
               <div className="mt-2 pr-11">

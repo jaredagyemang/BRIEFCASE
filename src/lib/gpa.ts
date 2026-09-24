@@ -1,87 +1,67 @@
-// Turns a GPA as written on a roster into a 0-5 GPA for the players table.
+// GPA is stored exactly as the roster or coach gives it - a 4.0-scale value
+// or a percentage - and never converted from one to the other. This tidies
+// the formatting into the forms the database accepts:
 //
-// - A plain GPA ("3.6", "4.2 weighted") is used as-is.
-// - A percentage ("85%") is converted with the common College Board
-//   percent-to-4.0 table. Schools' scales vary, so it's flagged for review.
-// - A range ("3.5-3.8", "80%-90%") uses its midpoint and is flagged too.
-// - Anything else ("92" with no %, letter grades, text) is left blank and
-//   flagged for manual entry rather than guessed.
+//   4.0 scale   "3.6"   "3.85"          ranges   "3.5-3.8"
+//   percentage  "85%"   "92.5%"                  "80%-90%"
+//
+// e.g. "80 – 90 %" -> "80%-90%", "3.5 to 3.8" -> "3.5-3.8", "85 %" -> "85%".
 
-export type GpaReading = {
-  // Value for the GPA field, as text ("" when it needs manual entry).
-  gpa: string;
-  // Shown on the review screen when the value should be checked or entered.
-  note: string | null;
-};
+export type GpaResult = { ok: true; value: string | null } | { ok: false; error: string };
 
-// College Board percent → 4.0 scale.
-const PERCENT_TABLE: [minPercent: number, gpa: number][] = [
-  [93, 4.0],
-  [90, 3.7],
-  [87, 3.3],
-  [83, 3.0],
-  [80, 2.7],
-  [77, 2.3],
-  [73, 2.0],
-  [70, 1.7],
-  [67, 1.3],
-  [65, 1.0],
-  [0, 0.0],
-];
+const NUM = String.raw`(\d{1,3}(?:\.\d{1,2})?)`;
+const RANGE = new RegExp(String.raw`^${NUM}(%?)(?:-|–|—|to)${NUM}(%?)$`, "i");
+const SINGLE = new RegExp(String.raw`^${NUM}(%?)$`);
 
-export function percentToGpa(percent: number): number {
-  return PERCENT_TABLE.find(([min]) => percent >= min)![1];
+const FORMAT_HELP = "Enter a GPA like 3.6 or a percentage like 85%";
+
+// Keeps the number as written, minus stray leading zeros ("03.5" -> "3.5").
+const tidy = (n: string) => n.replace(/^0+(?=\d)/, "");
+
+export function normalizeGpa(input: string | null | undefined): GpaResult {
+  const text = (input ?? "").trim();
+  if (!text) return { ok: true, value: null };
+  const compact = text.replace(/\s+/g, "");
+
+  const range = RANGE.exec(compact);
+  if (range) {
+    const [, low, lowPct, high, highPct] = range;
+    const percent = Boolean(lowPct || highPct);
+    if (!percent && Number(low) <= 5 && Number(high) > 5) {
+      return { ok: false, error: "Use the same kind on both sides (e.g. 3.5-3.8 or 80%-90%)" };
+    }
+    const tooHigh = [low, high].find((n) => Number(n) > (percent ? 100 : 5));
+    if (tooHigh) return outOfRange(percent, tooHigh);
+    if (Number(low) > Number(high)) return { ok: false, error: "Put the lower number first (e.g. 80%-90%)" };
+    const unit = percent ? "%" : "";
+    return { ok: true, value: `${tidy(low)}${unit}-${tidy(high)}${unit}` };
+  }
+
+  const single = SINGLE.exec(compact);
+  if (single) {
+    const [, value, pct] = single;
+    const percent = Boolean(pct);
+    if (Number(value) > (percent ? 100 : 5)) return outOfRange(percent, value);
+    return { ok: true, value: `${tidy(value)}${percent ? "%" : ""}` };
+  }
+
+  return { ok: false, error: FORMAT_HELP };
 }
 
-const NUMBER = String.raw`(\d{1,3}(?:\.\d+)?)`;
-const RANGE = new RegExp(String.raw`^${NUMBER}\s*(%?)\s*(?:-|–|—|to)\s*${NUMBER}\s*(%?)$`, "i");
-const SINGLE = new RegExp(String.raw`^${NUMBER}\s*(%?)$`);
+function outOfRange(percent: boolean, value: string): GpaResult {
+  if (percent) return { ok: false, error: "A percentage can't be over 100%" };
+  // e.g. "92": far too high for a 4.0-scale GPA, so probably a percentage.
+  if (Number(value) > 10) return { ok: false, error: `Add a % sign for a percentage (e.g. ${value}%)` };
+  return { ok: false, error: "A 4.0-scale GPA can't be over 5" };
+}
 
-// Up to two decimals, with at least one (3 -> "3.0", 3.65 -> "3.65").
-const round2 = (n: number) => {
-  const rounded = Math.round(n * 100) / 100;
-  return Number.isInteger(rounded) ? rounded.toFixed(1) : String(rounded);
-};
-
-export function readGpa(asWritten: string | null | undefined): GpaReading {
+// For roster scanning: the GPA as Claude read it, tidied. If it isn't a
+// 4.0-scale value or a percentage, it's left blank with a short note.
+export function readRosterGpa(asWritten: string | null | undefined): { gpa: string; note: string | null } {
   const original = (asWritten ?? "").trim();
-  if (!original) return { gpa: "", note: null };
-
-  // Ignore trailing labels like "weighted", "unweighted", "GPA".
-  const text = original.replace(/\b(un)?weighted\b|\bgpa\b|[()]/gi, "").trim();
-  const manual = { gpa: "", note: `GPA "${original}" couldn't be converted. Enter it manually.` };
-
-  const range = RANGE.exec(text);
-  if (range) {
-    const [, a, pa, b, pb] = range;
-    const low = Number(a);
-    const high = Number(b);
-    const isPercent = Boolean(pa || pb);
-    if (low > high) return manual;
-    if (isPercent) {
-      if (high > 100) return manual;
-      const mid = (low + high) / 2;
-      return {
-        gpa: round2(percentToGpa(mid)),
-        note: `GPA converted from ${original} (midpoint ${Math.round(mid * 100) / 100}%). Check it.`,
-      };
-    }
-    if (high <= 5) {
-      return { gpa: round2((low + high) / 2), note: `GPA is the midpoint of ${original}. Check it.` };
-    }
-    return manual;
-  }
-
-  const single = SINGLE.exec(text);
-  if (single) {
-    const value = Number(single[1]);
-    if (single[2]) {
-      if (value > 100) return manual;
-      return { gpa: round2(percentToGpa(value)), note: `GPA converted from ${original}. Check it.` };
-    }
-    if (value <= 5) return { gpa: round2(value), note: null };
-    return manual; // e.g. "92": probably a percentage, but not certain.
-  }
-
-  return manual;
+  // Labels like "weighted" or "W" aren't part of the value.
+  const cleaned = original.replace(/\b(un)?weighted\b|\bu?w\b|\bgpa\b|[()]/gi, "").trim();
+  const result = normalizeGpa(cleaned);
+  if (result.ok) return { gpa: result.value ?? "", note: null };
+  return { gpa: "", note: `Couldn't read GPA "${original}". Enter it manually.` };
 }

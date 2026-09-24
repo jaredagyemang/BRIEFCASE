@@ -15,7 +15,7 @@ const RosterSchema = z.object({
       last_name: z.string(),
       position: z.string().nullable(),
       grad_year: z.number().int().nullable(),
-      // Exactly as written ("3.6", "85%", "80%-90%"); the app converts it.
+      // As written ("3.6", "85%", "80%-90%"); stored as-is, never converted.
       gpa_as_written: z.string().nullable(),
       email: z.string().nullable(),
       // Only when the roster lists a club per player (e.g. showcase rosters).
@@ -36,7 +36,7 @@ Extract every player row you can see, top to bottom:
 - first_name / last_name: split the player's name. Rosters often write "Last, First" or put the last name in capitals; return normal capitalization (e.g. "McDonald", "O'Neil"). If only one name is legible, put it in last_name and leave first_name as "".
 - position: as written on the roster (e.g. "MF", "GK", "Forward"); null if not listed.
 - grad_year: the graduation year or class if the roster has one, as a 4-digit year ("'27" or "Class of 27" means 2027); null if not listed. Don't convert birth years or ages.
-- gpa_as_written: the player's GPA or grade average copied exactly as written, including any % sign, range, or label (e.g. "3.6", "4.1 W", "85%", "80%-90%"). Don't convert or round it; null if not listed.
+- gpa_as_written: the player's GPA or grade average copied exactly as written, including any % sign or range (e.g. "3.6", "85%", "80%-90%"). Never convert between a 4.0 scale and a percentage, and don't round. If the column header shows the values are percentages (e.g. "Avg %") but a value has no % sign, add the %. Null if not listed.
 - email: the player's email address exactly as written; null if not listed. Don't include parent or coach emails.
 - club_team: the player's club or team only if the roster has a per-player club/team column; otherwise null.
 - unclear: true if you're unsure about any value in the row.

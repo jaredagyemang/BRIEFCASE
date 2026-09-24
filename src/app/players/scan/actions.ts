@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { DuplicateMatch } from "@/lib/duplicates";
 import { isEmail } from "@/lib/form";
-import { readGpa } from "@/lib/gpa";
+import { normalizeGpa, readRosterGpa } from "@/lib/gpa";
 import { findMatchesForMany } from "@/lib/duplicates-server";
 import { RosterScanError, scanRosterImage } from "@/lib/roster-scan";
 import { createAuthedClient } from "@/lib/supabase/server";
@@ -19,8 +19,8 @@ export type RosterRow = {
   email: string;
   club_team: string;
   unclear: boolean;
-  // Why the GPA needs a look (converted from a percentage/range, or couldn't
-  // be converted). Cleared once the GPA is edited.
+  // Set when the roster's GPA couldn't be read as a 4.0-scale value or a
+  // percentage. Cleared once the GPA is edited.
   gpa_note: string | null;
 };
 
@@ -61,7 +61,7 @@ export async function scanRoster(formData: FormData): Promise<
   }
 
   const rows: RosterRow[] = roster.players.slice(0, MAX_ROWS).map((p) => {
-    const gpa = readGpa(p.gpa_as_written);
+    const gpa = readRosterGpa(p.gpa_as_written);
     return {
       jersey_number: p.jersey_number ?? "",
       first_name: p.first_name.trim(),
@@ -114,13 +114,13 @@ export async function saveRosterPlayers(input: { rows: SaveRow[] }): Promise<
     const last_name = row.last_name.trim();
     const jersey_number = row.jersey_number.trim().replace(/^#/, "") || null;
     const grad_year = parseYear(row.grad_year);
-    const gpaText = row.gpa.trim();
-    const gpa = gpaText ? Number(gpaText) : null;
+    const gpaResult = normalizeGpa(row.gpa);
+    const gpa = gpaResult.ok ? gpaResult.value : null;
     const email = row.email.trim() || null;
     if (!first_name || !last_name) rowErrors[i] = "Add a first and last name";
     else if (row.grad_year.trim() && !(grad_year && grad_year >= 2000 && grad_year <= 2100))
       rowErrors[i] = "Grad year should be a 4-digit year";
-    else if (gpa !== null && !(gpa >= 0 && gpa <= 5)) rowErrors[i] = "GPA should be between 0 and 5";
+    else if (!gpaResult.ok) rowErrors[i] = gpaResult.error;
     else if (email && !isEmail(email)) rowErrors[i] = "Enter a valid email";
     else if (jersey_number && jersey_number.length > 10) rowErrors[i] = "Jersey number is too long";
     return {

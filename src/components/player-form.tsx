@@ -42,7 +42,7 @@ export function PlayerForm({ action, player, submitLabel, cancelHref }: Props) {
       </div>
       <div className="grid grid-cols-2 gap-3">
         <Field {...field("club_team")} label="Club team" />
-        <Field {...field("gpa")} label="GPA" inputMode="decimal" placeholder="3.50" />
+        <Field {...field("gpa")} label="GPA" placeholder="3.5 or 85%" />
       </div>
       <Field {...field("phone")} label="Phone" type="tel" autoComplete="off" />
       <Field {...field("email")} label="Email" type="email" autoComplete="off" />
