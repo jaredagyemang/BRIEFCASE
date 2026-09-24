@@ -41,8 +41,29 @@ export function isLifecycleStatus(value: unknown): value is LifecycleStatus {
   return LIFECYCLE_STATUSES.some((s) => s.value === value);
 }
 
+export const TRAFFIC_LIGHTS = [
+  { value: "green", label: "Green", dot: "bg-green", ring: "ring-green" },
+  { value: "yellow", label: "Yellow", dot: "bg-yellow", ring: "ring-yellow" },
+  { value: "red", label: "Red", dot: "bg-red", ring: "ring-red" },
+] as const satisfies readonly { value: TrafficLight; label: string; dot: string; ring: string }[];
+
 export const TRAFFIC_LIGHT_DOT: Record<TrafficLight, string> = {
   green: "bg-green",
   yellow: "bg-yellow",
   red: "bg-red",
+};
+
+export function isTrafficLight(value: unknown): value is TrafficLight {
+  return value === "green" || value === "yellow" || value === "red";
+}
+
+export type TaskType = "outreach" | "watch_again" | "request_film" | "follow_up" | "other";
+
+
+export const TASK_LABELS: Record<TaskType, string> = {
+  outreach: "Queued for outreach",
+  watch_again: "Watch again",
+  request_film: "Film & info requested",
+  follow_up: "Follow up",
+  other: "Task",
 };

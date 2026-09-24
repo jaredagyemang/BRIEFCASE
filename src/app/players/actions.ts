@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAuthedClient } from "@/lib/supabase/server";
-import { isLifecycleStatus, type LifecycleStatus } from "@/lib/players";
+import {
+  isLifecycleStatus,
+  isTrafficLight,
+  type LifecycleStatus,
+  type TaskType,
+  type TrafficLight,
+} from "@/lib/players";
 
 export type PlayerFormState =
   | {
@@ -120,6 +126,86 @@ export async function updatePlayerStatus(id: string, status: LifecycleStatus) {
     .eq("id", id);
   if (error) throw new Error(error.message);
 
+  revalidatePlayer(id);
+}
+
+// ---------------------------------------------------------------------------
+// Traffic-light rating
+// ---------------------------------------------------------------------------
+
+const STATUS_FOR_RATING: Partial<Record<TrafficLight, LifecycleStatus>> = {
+  yellow: "watch_again",
+  red: "archived",
+};
+
+// Records a rating as a new evaluation, stores it on the player as their
+// latest rating, and moves Yellow/Red players to their next stage.
+export async function ratePlayer(playerId: string, rating: TrafficLight) {
+  if (!isTrafficLight(rating)) {
+    throw new Error("Invalid rating");
+  }
+
+  const supabase = await createAuthedClient();
+
+  const { error: evalError } = await supabase
+    .from("evaluations")
+    .insert({ player_id: playerId, traffic_light_rating: rating });
+  if (evalError) throw new Error(evalError.message);
+
+  const status = STATUS_FOR_RATING[rating];
+  const { error } = await supabase
+    .from("players")
+    .update({ traffic_light: rating, ...(status && { lifecycle_status: status }) })
+    .eq("id", playerId);
+  if (error) throw new Error(error.message);
+
+  revalidatePlayer(playerId);
+}
+
+// Green follow-up: "Queue for Outreach".
+export async function queueForOutreach(playerId: string) {
+  const supabase = await createAuthedClient();
+
+  const { error } = await supabase
+    .from("players")
+    .update({ lifecycle_status: "to_be_contacted" })
+    .eq("id", playerId);
+  if (error) throw new Error(error.message);
+
+  await addOpenTask(supabase, playerId, "outreach");
+  revalidatePlayer(playerId);
+}
+
+// Yellow follow-up: "Request Film & Info". Saved as an open task for now;
+// sending the actual request comes later.
+export async function requestFilmAndInfo(playerId: string) {
+  const supabase = await createAuthedClient();
+  await addOpenTask(supabase, playerId, "request_film");
+  revalidatePlayer(playerId);
+}
+
+type Supabase = Awaited<ReturnType<typeof createAuthedClient>>;
+
+// Adds an open task unless the player already has an open one of that type,
+// so repeat taps don't pile up duplicates.
+async function addOpenTask(supabase: Supabase, playerId: string, taskType: TaskType) {
+  const { data: existing, error: findError } = await supabase
+    .from("tasks")
+    .select("id")
+    .eq("player_id", playerId)
+    .eq("task_type", taskType)
+    .eq("status", "open")
+    .limit(1);
+  if (findError) throw new Error(findError.message);
+  if (existing.length > 0) return;
+
+  const { error } = await supabase
+    .from("tasks")
+    .insert({ player_id: playerId, task_type: taskType });
+  if (error) throw new Error(error.message);
+}
+
+function revalidatePlayer(playerId: string) {
   revalidatePath("/players");
-  revalidatePath(`/players/${id}`);
+  revalidatePath(`/players/${playerId}`);
 }
