@@ -105,11 +105,14 @@ export async function transcribeNote(noteId: string): Promise<NoteResult<{ text:
     return { ok: false, error: e instanceof Error ? e.message : "Transcription failed. Try again." };
   }
 
-  const { error: updateError } = await supabase
+  const { data: updated, error: updateError } = await supabase
     .from("evaluations")
     .update({ transcript_text: text })
-    .eq("id", noteId);
+    .eq("id", noteId)
+    .select("id");
   if (updateError) return { ok: false, error: "Transcribed, but couldn't save the text. Try again." };
+  // Row-Level Security blocks updates to other people's notes silently.
+  if (!updated?.length) return { ok: false, error: "Only the person who recorded this note can transcribe it." };
 
   revalidatePath(`/players/${note.player_id}`);
   return { ok: true, text };
@@ -155,11 +158,13 @@ export async function updateNote(noteId: string, text: string): Promise<NoteResu
   const { supabase, note, error } = await loadEditableNote(noteId);
   if (!note) return { ok: false, error };
 
-  const { error: updateError } = await supabase
+  const { data: changed, error: updateError } = await supabase
     .from("evaluations")
     .update({ transcript_text: updated })
-    .eq("id", noteId);
+    .eq("id", noteId)
+    .select("id");
   if (updateError) return { ok: false, error: "Couldn't save your changes. Try again." };
+  if (!changed?.length) return { ok: false, error: "Only the person who wrote this note can change it." };
 
   revalidatePath(`/players/${note.player_id}`);
   return { ok: true };
@@ -170,8 +175,13 @@ export async function deleteNote(noteId: string): Promise<NoteResult> {
   const { supabase, note, error } = await loadEditableNote(noteId);
   if (!note) return { ok: false, error };
 
-  const { error: deleteError } = await supabase.from("evaluations").delete().eq("id", noteId);
+  const { data: deleted, error: deleteError } = await supabase
+    .from("evaluations")
+    .delete()
+    .eq("id", noteId)
+    .select("id");
   if (deleteError) return { ok: false, error: "Couldn't delete the note. Try again." };
+  if (!deleted?.length) return { ok: false, error: "Only the person who wrote this note can change it." };
 
   // The note is gone either way; a leftover file is only wasted storage.
   if (note.raw_audio_url) {

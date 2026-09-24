@@ -386,13 +386,15 @@ export function PlayerNotes({ playerId, notes }: { playerId: string; notes: Note
                     <p className="text-sm text-muted">
                       {transcribeErrors[note.id] ?? "Not transcribed yet."}
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => transcribe(note.id)}
-                      className="shrink-0 rounded-full bg-surface-muted px-3.5 py-1.5 text-sm font-semibold"
-                    >
-                      Retry
-                    </button>
+                    {note.canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => transcribe(note.id)}
+                        className="shrink-0 rounded-full bg-surface-muted px-3.5 py-1.5 text-sm font-semibold"
+                      >
+                        Retry
+                      </button>
+                    )}
                   </div>
                 )}
                 {note.audioUrl && (
