@@ -24,29 +24,6 @@ export function Field({ name, label, defaultValue, error, ...inputProps }: Field
   );
 }
 
-type TextAreaFieldProps = {
-  name: string;
-  label: string;
-  defaultValue: string;
-  error?: string;
-} & Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "name" | "defaultValue">;
-
-export function TextAreaField({ name, label, defaultValue, error, ...props }: TextAreaFieldProps) {
-  return (
-    <label className="block">
-      <span className={labelClass}>{label}</span>
-      <textarea
-        name={name}
-        defaultValue={defaultValue}
-        aria-invalid={Boolean(error)}
-        className={`${inputClass} min-h-32 resize-y ${error ? "border-red" : ""}`}
-        {...props}
-      />
-      {error && <span className="mt-1 block px-1 text-sm text-red">{error}</span>}
-    </label>
-  );
-}
-
 // Form-level error message plus the Cancel / Save buttons.
 export function FormFooter({
   error,

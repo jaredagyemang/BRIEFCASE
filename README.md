@@ -16,6 +16,5 @@ Open http://localhost:3000.
 
 - Player directory with lifecycle status and Green/Yellow/Red ratings
 - Voice notes on player profiles, transcribed with OpenAI Whisper
-- College coach directory
 
 V2 features (roster OCR, video swiper, email integration, approval gates) are stubbed only.

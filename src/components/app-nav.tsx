@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 
 const tabs = [
   { href: "/players", label: "Players", icon: "🏃" },
-  { href: "/coaches", label: "Coaches", icon: "📇" },
 ];
 
 // Top bar on larger screens, iOS-style bottom tab bar on phones. The Profile
