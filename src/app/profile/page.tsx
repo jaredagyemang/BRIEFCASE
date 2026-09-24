@@ -53,6 +53,8 @@ export default async function ProfilePage() {
           Sign out
         </button>
       </form>
+
+      <p className="mt-6 text-center text-xs text-muted">Version {process.env.APP_VERSION}</p>
     </div>
   );
 }
