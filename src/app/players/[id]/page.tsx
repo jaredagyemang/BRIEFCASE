@@ -1,25 +1,36 @@
 import Link from "next/link";
 import { RatingButtons } from "@/components/rating-buttons";
 import { StatusSelect } from "@/components/status-select";
-import { TASK_LABELS, TRAFFIC_LIGHTS, type TaskType } from "@/lib/players";
+import { TASK_LABELS, TRAFFIC_LIGHTS, type TaskType, type TrafficLight } from "@/lib/players";
 import { createClient } from "@/lib/supabase/server";
 import { timeAgo } from "@/lib/time";
 import { getPlayer } from "./data";
+
+type RatingRow = {
+  id: string;
+  traffic_light_rating: TrafficLight;
+  created_at: string;
+  rater: { full_name: string } | null;
+};
+
+function lightFor(rating: TrafficLight) {
+  return TRAFFIC_LIGHTS.find((l) => l.value === rating)!;
+}
 
 export default async function PlayerPage({ params }: PageProps<"/players/[id]">) {
   const { id } = await params;
   const player = await getPlayer(id);
 
   const supabase = await createClient();
-  const [{ data: latestEval }, { data: openTasks }] = await Promise.all([
+  const [{ data: ratings }, { data: openTasks }] = await Promise.all([
     supabase
       .from("evaluations")
-      .select("traffic_light_rating, created_at")
+      .select("id, traffic_light_rating, created_at, rater:staff(full_name)")
       .eq("player_id", id)
       .not("traffic_light_rating", "is", null)
       .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+      .limit(10)
+      .returns<RatingRow[]>(),
     supabase
       .from("tasks")
       .select("id, task_type, created_at")
@@ -27,6 +38,7 @@ export default async function PlayerPage({ params }: PageProps<"/players/[id]">)
       .eq("status", "open")
       .order("created_at", { ascending: false }),
   ]);
+  const latestEval = ratings?.[0];
   const latestLight = TRAFFIC_LIGHTS.find((l) => l.value === player.traffic_light);
 
   const details = [
@@ -87,10 +99,31 @@ export default async function PlayerPage({ params }: PageProps<"/players/[id]">)
               <span className={`h-2.5 w-2.5 rounded-full ${latestLight.dot}`} />
               {latestLight.label}
               {latestEval && ` · ${timeAgo(latestEval.created_at)}`}
+              {latestEval?.rater && ` · ${latestEval.rater.full_name}`}
             </span>
           )}
         </div>
         <RatingButtons playerId={player.id} rating={player.traffic_light} />
+        {ratings && ratings.length > 1 && (
+          <details className="group mt-3 rounded-2xl bg-surface">
+            <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-medium">
+              Rating history
+              <span className="text-muted transition-transform group-open:rotate-90">›</span>
+            </summary>
+            <ul className="divide-y divide-border border-t border-border">
+              {ratings.map((r) => (
+                <li key={r.id} className="flex items-center gap-3 px-4 py-3 text-sm">
+                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${lightFor(r.traffic_light_rating).dot}`} />
+                  <span className="font-medium">{lightFor(r.traffic_light_rating).label}</span>
+                  <span className="min-w-0 flex-1 truncate text-muted">
+                    {r.rater?.full_name ?? "Shared login"}
+                  </span>
+                  <span className="shrink-0 text-muted">{timeAgo(r.created_at)}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
         {openTasks && openTasks.length > 0 && (
           <ul className="mt-3 space-y-2">
             {openTasks.map((task) => (
