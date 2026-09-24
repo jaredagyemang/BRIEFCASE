@@ -1,12 +1,21 @@
 import Link from "next/link";
 import { ContactActions } from "@/components/contact-actions";
 import { DetailList } from "@/components/detail-list";
+import { PlayerNotes, type NoteItem } from "@/components/player-notes";
 import { RatingButtons } from "@/components/rating-buttons";
 import { StatusSelect } from "@/components/status-select";
 import { TASK_LABELS, TRAFFIC_LIGHTS, type TaskType, type TrafficLight } from "@/lib/players";
 import { createClient } from "@/lib/supabase/server";
 import { timeAgo } from "@/lib/time";
 import { getPlayer } from "./data";
+
+type NoteRow = {
+  id: string;
+  transcript_text: string | null;
+  raw_audio_url: string | null;
+  created_at: string;
+  author: { full_name: string } | null;
+};
 
 type RatingRow = {
   id: string;
@@ -24,7 +33,7 @@ export default async function PlayerPage({ params }: PageProps<"/players/[id]">)
   const player = await getPlayer(id);
 
   const supabase = await createClient();
-  const [{ data: ratings }, { data: openTasks }] = await Promise.all([
+  const [{ data: ratings }, { data: openTasks }, { data: noteRows }] = await Promise.all([
     supabase
       .from("evaluations")
       .select("id, traffic_light_rating, created_at, rater:staff(full_name)")
@@ -39,7 +48,31 @@ export default async function PlayerPage({ params }: PageProps<"/players/[id]">)
       .eq("player_id", id)
       .eq("status", "open")
       .order("created_at", { ascending: false }),
+    // Notes: evaluations with typed/transcribed text or a voice recording.
+    supabase
+      .from("evaluations")
+      .select("id, transcript_text, raw_audio_url, created_at, author:staff(full_name)")
+      .eq("player_id", id)
+      .or("transcript_text.not.is.null,raw_audio_url.not.is.null")
+      .order("created_at", { ascending: false })
+      .limit(50)
+      .returns<NoteRow[]>(),
   ]);
+
+  // Voice notes live in a private bucket, so play them via short-lived links.
+  const audioPaths = (noteRows ?? []).flatMap((n) => (n.raw_audio_url ? [n.raw_audio_url] : []));
+  const { data: signed } = audioPaths.length
+    ? await supabase.storage.from("voice-notes").createSignedUrls(audioPaths, 60 * 60)
+    : { data: [] };
+  const signedUrl = new Map(signed?.map((s) => [s.path, s.signedUrl]));
+  const notes: NoteItem[] = (noteRows ?? []).map((n) => ({
+    id: n.id,
+    text: n.transcript_text,
+    audioUrl: n.raw_audio_url ? (signedUrl.get(n.raw_audio_url) ?? null) : null,
+    isVoice: Boolean(n.raw_audio_url),
+    author: n.author?.full_name ?? null,
+    when: timeAgo(n.created_at),
+  }));
   const latestEval = ratings?.[0];
   const latestLight = TRAFFIC_LIGHTS.find((l) => l.value === player.traffic_light);
 
@@ -134,6 +167,8 @@ export default async function PlayerPage({ params }: PageProps<"/players/[id]">)
           </ul>
         )}
       </section>
+
+      <PlayerNotes playerId={player.id} notes={notes} />
 
       <ContactActions phone={player.phone} email={player.email} />
 
