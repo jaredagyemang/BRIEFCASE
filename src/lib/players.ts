@@ -28,7 +28,6 @@ export type Player = {
   email: string | null;
   traffic_light: TrafficLight | null;
   lifecycle_status: LifecycleStatus;
-  assigned_coach_id: string | null;
   created_at: string;
   updated_at: string;
 };
