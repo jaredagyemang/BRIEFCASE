@@ -6,6 +6,7 @@ import { RatingButtons } from "@/components/rating-buttons";
 import { StatusSelect } from "@/components/status-select";
 import { TASK_LABELS, TRAFFIC_LIGHTS, type TaskType, type TrafficLight } from "@/lib/players";
 import { createClient } from "@/lib/supabase/server";
+import { findMatchingPlayers } from "@/lib/duplicates-server";
 import { getCurrentUser } from "@/lib/staff";
 import { timeAgo } from "@/lib/time";
 import { getPlayer } from "./data";
@@ -77,6 +78,7 @@ export default async function PlayerPage({ params }: PageProps<"/players/[id]">)
     canEdit: !n.rated_by || n.rated_by === currentUser?.id,
   }));
   const latestEval = ratings?.[0];
+  const possibleDuplicates = await findMatchingPlayers(supabase, player, player.id);
   const latestLight = TRAFFIC_LIGHTS.find((l) => l.value === player.traffic_light);
 
   const details = [
@@ -101,6 +103,29 @@ export default async function PlayerPage({ params }: PageProps<"/players/[id]">)
           Edit
         </Link>
       </div>
+
+      {possibleDuplicates.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-yellow/40 bg-yellow/10 p-4" role="note">
+          <p className="font-semibold">⚠️ Possible duplicate</p>
+          <p className="mt-0.5 text-sm text-muted">Same name and grad year as:</p>
+          <ul className="mt-2 space-y-2">
+            {possibleDuplicates.map((d) => (
+              <li key={d.id}>
+                <Link
+                  href={`/players/${d.id}`}
+                  className="flex items-center gap-3 rounded-xl bg-surface px-3 py-2.5"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{d.name}</span>
+                    {d.detail && <span className="block truncate text-sm text-muted">{d.detail}</span>}
+                  </span>
+                  <span className="text-muted">›</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="mt-6 flex flex-col items-center text-center">
         {/* The avatar ring shows the player's latest rating. */}
