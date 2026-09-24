@@ -8,7 +8,7 @@ import {
   type Player,
 } from "@/lib/players";
 import { StatusPill } from "@/components/status-pill";
-import { PlayerSearch } from "@/components/player-search";
+import { SearchBox } from "@/components/search-box";
 
 type ListPlayer = Pick<
   Player,
@@ -66,7 +66,7 @@ export default async function PlayersPage({ searchParams }: PageProps<"/players"
 
       <div className="mt-4">
         <Suspense>
-          <PlayerSearch />
+          <SearchBox placeholder="Search name, club, position" label="Search players" />
         </Suspense>
       </div>
 

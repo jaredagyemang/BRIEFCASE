@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAuthedClient } from "@/lib/supabase/server";
+import { invalid, isEmail, submittedValues, text, type FormState } from "@/lib/form";
 import {
   isLifecycleStatus,
   isTrafficLight,
@@ -11,27 +12,7 @@ import {
   type TrafficLight,
 } from "@/lib/players";
 
-export type PlayerFormState =
-  | {
-      error: string;
-      fieldErrors?: Record<string, string>;
-      // Echoed back so the form keeps what was typed after React resets it.
-      values: Record<string, string>;
-    }
-  | undefined;
-
-function submittedValues(formData: FormData) {
-  const values: Record<string, string> = {};
-  formData.forEach((value, key) => {
-    if (typeof value === "string" && !key.startsWith("$ACTION")) values[key] = value;
-  });
-  return values;
-}
-
-function text(formData: FormData, key: string) {
-  const value = String(formData.get(key) ?? "").trim();
-  return value === "" ? null : value;
-}
+export type PlayerFormState = FormState;
 
 // Turns form fields into a players row, or returns per-field errors.
 function parsePlayer(formData: FormData) {
@@ -55,7 +36,7 @@ function parsePlayer(formData: FormData) {
   }
 
   const email = text(formData, "email");
-  if (email && !/^\S+@\S+\.\S+$/.test(email)) {
+  if (email && !isEmail(email)) {
     fieldErrors.email = "Enter a valid email";
   }
 
@@ -79,7 +60,7 @@ export async function createPlayer(
 ): Promise<PlayerFormState> {
   const { row, fieldErrors } = parsePlayer(formData);
   if (Object.keys(fieldErrors).length > 0) {
-    return { error: "Please fix the highlighted fields.", fieldErrors, values: submittedValues(formData) };
+    return invalid(fieldErrors, formData);
   }
 
   const supabase = await createAuthedClient();
@@ -102,7 +83,7 @@ export async function updatePlayer(
 ): Promise<PlayerFormState> {
   const { row, fieldErrors } = parsePlayer(formData);
   if (Object.keys(fieldErrors).length > 0) {
-    return { error: "Please fix the highlighted fields.", fieldErrors, values: submittedValues(formData) };
+    return invalid(fieldErrors, formData);
   }
 
   const supabase = await createAuthedClient();

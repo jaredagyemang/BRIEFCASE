@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { ContactActions } from "@/components/contact-actions";
+import { DetailList } from "@/components/detail-list";
 import { RatingButtons } from "@/components/rating-buttons";
 import { StatusSelect } from "@/components/status-select";
 import { TASK_LABELS, TRAFFIC_LIGHTS, type TaskType, type TrafficLight } from "@/lib/players";
@@ -49,12 +51,6 @@ export default async function PlayerPage({ params }: PageProps<"/players/[id]">)
     { label: "Phone", value: player.phone },
     { label: "Email", value: player.email },
   ];
-
-  const contactActions = [
-    player.phone && { href: `tel:${player.phone}`, label: "Call", icon: "📞" },
-    player.phone && { href: `sms:${player.phone}`, label: "Text", icon: "💬" },
-    player.email && { href: `mailto:${player.email}`, label: "Email", icon: "✉️" },
-  ].filter((a): a is { href: string; label: string; icon: string } => Boolean(a));
 
   return (
     <div>
@@ -139,29 +135,9 @@ export default async function PlayerPage({ params }: PageProps<"/players/[id]">)
         )}
       </section>
 
-      {contactActions.length > 0 && (
-        <div className="mt-6 flex justify-center gap-3">
-          {contactActions.map((a) => (
-            <a
-              key={a.label}
-              href={a.href}
-              className="flex w-20 flex-col items-center gap-1 rounded-2xl bg-surface py-3 text-xs font-medium text-accent"
-            >
-              <span className="text-xl">{a.icon}</span>
-              {a.label}
-            </a>
-          ))}
-        </div>
-      )}
+      <ContactActions phone={player.phone} email={player.email} />
 
-      <dl className="mt-6 divide-y divide-border overflow-hidden rounded-3xl bg-surface">
-        {details.map((d) => (
-          <div key={d.label} className="flex justify-between gap-4 px-4 py-3.5">
-            <dt className="text-muted">{d.label}</dt>
-            <dd className="truncate text-right font-medium">{d.value ?? "—"}</dd>
-          </div>
-        ))}
-      </dl>
+      <DetailList items={details} />
     </div>
   );
 }

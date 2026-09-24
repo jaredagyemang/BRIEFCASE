@@ -1,10 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useActionState } from "react";
 import type { Player } from "@/lib/players";
 import type { PlayerFormState } from "@/app/players/actions";
-import { inputClass, labelClass } from "@/components/ui";
+import { Field, FormFooter } from "@/components/form";
 
 type Props = {
   action: (state: PlayerFormState, formData: FormData) => Promise<PlayerFormState>;
@@ -12,29 +11,6 @@ type Props = {
   submitLabel: string;
   cancelHref: string;
 };
-
-type FieldProps = {
-  name: keyof Player;
-  label: string;
-  defaultValue: string;
-  error?: string;
-} & Omit<React.InputHTMLAttributes<HTMLInputElement>, "name" | "defaultValue">;
-
-function Field({ name, label, defaultValue, error, ...inputProps }: FieldProps) {
-  return (
-    <label className="block">
-      <span className={labelClass}>{label}</span>
-      <input
-        name={name}
-        defaultValue={defaultValue}
-        aria-invalid={Boolean(error)}
-        className={`${inputClass} ${error ? "border-red" : ""}`}
-        {...inputProps}
-      />
-      {error && <span className="mt-1 block px-1 text-sm text-red">{error}</span>}
-    </label>
-  );
-}
 
 export function PlayerForm({ action, player, submitLabel, cancelHref }: Props) {
   const [state, formAction, pending] = useActionState(action, undefined);
@@ -63,27 +39,12 @@ export function PlayerForm({ action, player, submitLabel, cancelHref }: Props) {
       <Field {...field("phone")} label="Phone" type="tel" autoComplete="off" />
       <Field {...field("email")} label="Email" type="email" autoComplete="off" />
 
-      {state?.error && (
-        <p className="rounded-2xl bg-red/10 px-4 py-3 text-sm text-red" aria-live="polite">
-          {state.error}
-        </p>
-      )}
-
-      <div className="flex gap-3 pt-2">
-        <Link
-          href={cancelHref}
-          className="flex-1 rounded-2xl bg-surface-muted py-3.5 text-center font-semibold"
-        >
-          Cancel
-        </Link>
-        <button
-          type="submit"
-          disabled={pending}
-          className="flex-1 rounded-2xl bg-accent py-3.5 font-semibold text-accent-foreground transition-opacity disabled:opacity-60"
-        >
-          {pending ? "Saving…" : submitLabel}
-        </button>
-      </div>
+      <FormFooter
+        error={state?.error}
+        pending={pending}
+        submitLabel={submitLabel}
+        cancelHref={cancelHref}
+      />
     </form>
   );
 }

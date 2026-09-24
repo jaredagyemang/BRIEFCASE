@@ -4,7 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 // Search box that keeps ?q= in the URL (debounced) so results are server-rendered.
-export function PlayerSearch() {
+export function SearchBox({ placeholder, label }: { placeholder: string; label: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -32,8 +32,8 @@ export function PlayerSearch() {
         type="search"
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        placeholder="Search name, club, position"
-        aria-label="Search players"
+        placeholder={placeholder}
+        aria-label={label}
         className="w-full rounded-full bg-surface-muted py-3 pr-4 pl-11 text-base outline-none focus:ring-4 focus:ring-accent/15 placeholder:text-muted"
       />
     </div>
