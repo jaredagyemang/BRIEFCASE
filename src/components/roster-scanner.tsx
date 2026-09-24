@@ -46,13 +46,17 @@ const cellClass =
   "min-w-0 rounded-xl border border-border bg-background px-3 py-2 text-base outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 placeholder:text-muted";
 
 let nextId = 1;
-const emptyRow = (): RosterRow => ({
+const emptyRow = (club_team: string): RosterRow => ({
   jersey_number: "",
   first_name: "",
   last_name: "",
   position: "",
   grad_year: "",
+  gpa: "",
+  email: "",
+  club_team,
   unclear: false,
+  gpa_note: null,
 });
 
 export function RosterScanner() {
@@ -61,7 +65,7 @@ export function RosterScanner() {
   const [error, setError] = useState<string | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [showPhoto, setShowPhoto] = useState(false);
-  const [clubTeam, setClubTeam] = useState("");
+  const [clubForAll, setClubForAll] = useState("");
   const [yearForAll, setYearForAll] = useState("");
   const [items, setItems] = useState<Item[]>([]);
   const [saving, startSaving] = useTransition();
@@ -98,7 +102,7 @@ export function RosterScanner() {
       setStage("capture");
       return;
     }
-    setClubTeam(result.teamName);
+    setClubForAll(result.teamName);
     setItems(
       result.rows.map((row, i) => ({ id: nextId++, row, matches: result.matches[i] ?? [], addAnyway: false })),
     );
@@ -128,7 +132,14 @@ export function RosterScanner() {
 
   function updateRow(id: number, field: keyof RosterRow, value: string) {
     const next = items.map((it) =>
-      it.id === id ? { ...it, row: { ...it.row, [field]: value }, error: undefined } : it,
+      it.id === id
+        ? {
+            ...it,
+            // Editing the GPA means it's been checked; drop the review note.
+            row: { ...it.row, [field]: value, ...(field === "gpa" && { gpa_note: null }) },
+            error: undefined,
+          }
+        : it,
     );
     setItems(next);
     if (field === "first_name" || field === "last_name" || field === "grad_year") scheduleDuplicateCheck(next);
@@ -141,12 +152,20 @@ export function RosterScanner() {
     scheduleDuplicateCheck(next);
   }
 
+  function applyClubToAll() {
+    if (!clubForAll.trim()) return;
+    setItems((current) => current.map((it) => ({ ...it, row: { ...it.row, club_team: clubForAll.trim() } })));
+  }
+
   function removeRow(id: number) {
     setItems((current) => current.filter((it) => it.id !== id));
   }
 
   function addRow() {
-    setItems((current) => [...current, { id: nextId++, row: emptyRow(), matches: [], addAnyway: false }]);
+    setItems((current) => [
+      ...current,
+      { id: nextId++, row: emptyRow(clubForAll.trim()), matches: [], addAnyway: false },
+    ]);
   }
 
   // Rows that will be saved: everything except possible duplicates the
@@ -168,7 +187,6 @@ export function RosterScanner() {
       let result: Awaited<ReturnType<typeof saveRosterPlayers>>;
       try {
         result = await saveRosterPlayers({
-          clubTeam,
           rows: toSave.map((it) => ({
             ...it.row,
             confirmedNotDuplicateOf: it.addAnyway ? it.matches.map((m) => m.id) : [],
@@ -290,29 +308,22 @@ export function RosterScanner() {
           // eslint-disable-next-line @next/next/no-img-element -- local preview of the photo just taken
           <img src={photoUrl} alt="Roster photo" className="mt-3 w-full rounded-2xl" />
         )}
-        <label className="mt-4 block">
-          <span className="mb-1 block px-1 text-sm font-medium text-muted">Club team (for everyone)</span>
-          <input value={clubTeam} onChange={(e) => setClubTeam(e.target.value)} className={`${cellClass} w-full`} />
-        </label>
-        <div className="mt-3 flex items-end gap-2">
-          <label className="block flex-1">
-            <span className="mb-1 block px-1 text-sm font-medium text-muted">Grad year for everyone</span>
-            <input
-              value={yearForAll}
-              onChange={(e) => setYearForAll(e.target.value)}
-              inputMode="numeric"
-              placeholder="e.g. 2027"
-              className={`${cellClass} w-full`}
-            />
-          </label>
-          <button
-            type="button"
-            onClick={applyYearToAll}
-            disabled={!yearForAll.trim()}
-            className="rounded-xl bg-surface-muted px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
-          >
-            Apply
-          </button>
+        <div className="mt-4 space-y-3">
+          <ApplyToAll
+            label="Club team for everyone"
+            value={clubForAll}
+            onChange={setClubForAll}
+            onApply={applyClubToAll}
+            placeholder="e.g. Solar SC"
+          />
+          <ApplyToAll
+            label="Grad year for everyone"
+            value={yearForAll}
+            onChange={setYearForAll}
+            onApply={applyYearToAll}
+            placeholder="e.g. 2027"
+            inputMode="numeric"
+          />
         </div>
       </div>
 
@@ -323,7 +334,7 @@ export function RosterScanner() {
           return (
             <li
               key={it.id}
-              className={`rounded-2xl bg-surface p-3 ${it.error ? "ring-2 ring-red" : it.row.unclear ? "ring-2 ring-yellow/60" : ""} ${skippedRow ? "opacity-70" : ""}`}
+              className={`rounded-2xl bg-surface p-3 ${it.error ? "ring-2 ring-red" : it.row.unclear || it.row.gpa_note ? "ring-2 ring-yellow/60" : ""} ${skippedRow ? "opacity-70" : ""}`}
             >
               <div className="flex items-center gap-2">
                 <input
@@ -374,8 +385,40 @@ export function RosterScanner() {
                   className={`${cellClass} w-24 shrink-0`}
                 />
               </div>
+              <div className="mt-2 flex items-center gap-2 pr-11">
+                <input
+                  value={it.row.club_team}
+                  onChange={(e) => updateRow(it.id, "club_team", e.target.value)}
+                  aria-label={`Row ${index + 1} club team`}
+                  placeholder="Club team"
+                  className={`${cellClass} flex-1`}
+                />
+                <input
+                  value={it.row.gpa}
+                  onChange={(e) => updateRow(it.id, "gpa", e.target.value)}
+                  aria-label={`Row ${index + 1} GPA`}
+                  placeholder="GPA"
+                  inputMode="decimal"
+                  className={`${cellClass} w-24 shrink-0 ${it.row.gpa_note ? "border-yellow" : ""}`}
+                />
+              </div>
+              <div className="mt-2 pr-11">
+                <input
+                  value={it.row.email}
+                  onChange={(e) => updateRow(it.id, "email", e.target.value)}
+                  aria-label={`Row ${index + 1} email`}
+                  placeholder="Email"
+                  type="email"
+                  inputMode="email"
+                  autoCapitalize="none"
+                  className={`${cellClass} w-full`}
+                />
+              </div>
 
               {it.error && <p className="mt-2 px-1 text-sm text-red">{it.error}</p>}
+              {it.row.gpa_note && !it.error && (
+                <p className="mt-2 px-1 text-sm text-yellow-700 dark:text-yellow">{it.row.gpa_note}</p>
+              )}
               {it.row.unclear && !it.error && (
                 <p className="mt-2 px-1 text-sm text-yellow-700 dark:text-yellow">Hard to read. Check this row.</p>
               )}
@@ -450,6 +493,48 @@ export function RosterScanner() {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// A value to set on every row, applied with a button so rows edited one by
+// one aren't overwritten by accident.
+function ApplyToAll({
+  label,
+  value,
+  onChange,
+  onApply,
+  placeholder,
+  inputMode,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  onApply: () => void;
+  placeholder: string;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+}) {
+  return (
+    <div className="flex items-end gap-2">
+      <label className="block flex-1">
+        <span className="mb-1 block px-1 text-sm font-medium text-muted">{label}</span>
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          inputMode={inputMode}
+          className={`${cellClass} w-full`}
+        />
+      </label>
+      <button
+        type="button"
+        onClick={onApply}
+        disabled={!value.trim()}
+        aria-label={`Apply ${label.toLowerCase()}`}
+        className="rounded-xl bg-surface-muted px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
+      >
+        Apply
+      </button>
     </div>
   );
 }
