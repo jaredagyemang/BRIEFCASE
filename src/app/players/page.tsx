@@ -13,7 +13,15 @@ import { SearchBox } from "@/components/search-box";
 
 type ListPlayer = Pick<
   Player,
-  "id" | "first_name" | "last_name" | "grad_year" | "position" | "club_team" | "lifecycle_status" | "traffic_light"
+  | "id"
+  | "first_name"
+  | "last_name"
+  | "jersey_number"
+  | "grad_year"
+  | "position"
+  | "club_team"
+  | "lifecycle_status"
+  | "traffic_light"
 >;
 
 export default async function PlayersPage({ searchParams }: PageProps<"/players">) {
@@ -21,6 +29,7 @@ export default async function PlayersPage({ searchParams }: PageProps<"/players"
   const q = typeof params.q === "string" ? params.q : "";
   const status = isLifecycleStatus(params.status) ? params.status : null;
   const showDuplicates = params.status === "duplicates";
+  const added = typeof params.added === "string" ? Number(params.added) : 0;
 
   const supabase = await createClient();
 
@@ -34,7 +43,7 @@ export default async function PlayersPage({ searchParams }: PageProps<"/players"
 
   let query = supabase
     .from("players")
-    .select("id, first_name, last_name, grad_year, position, club_team, lifecycle_status, traffic_light")
+    .select("id, first_name, last_name, jersey_number, grad_year, position, club_team, lifecycle_status, traffic_light")
     .order("last_name")
     .order("first_name")
     .limit(500);
@@ -78,13 +87,27 @@ export default async function PlayersPage({ searchParams }: PageProps<"/players"
     <div>
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight">Players</h1>
-        <Link
-          href="/players/new"
-          className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground"
-        >
-          + Add
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            href="/players/scan"
+            className="rounded-full bg-surface-muted px-4 py-2 text-sm font-semibold"
+          >
+            📷 Scan
+          </Link>
+          <Link
+            href="/players/new"
+            className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground"
+          >
+            + Add
+          </Link>
+        </div>
       </div>
+
+      {added > 0 && (
+        <p className="mt-4 rounded-2xl bg-green/15 px-4 py-3 text-sm font-medium" role="status">
+          ✅ Added {added} player{added === 1 ? "" : "s"} from the roster.
+        </p>
+      )}
 
       <div className="mt-4">
         <Suspense>

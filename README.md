@@ -16,5 +16,6 @@ Open http://localhost:3000.
 
 - Player directory with lifecycle status and Green/Yellow/Red ratings
 - Voice notes on player profiles, transcribed with OpenAI Whisper
+- Roster scanning: photograph a paper roster and Claude extracts the players for review
 
-V2 features (roster OCR, video swiper, email integration, approval gates) are stubbed only.
+V2 features (video swiper, email integration, approval gates) are stubbed only.

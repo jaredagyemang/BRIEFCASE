@@ -35,7 +35,8 @@ export function PlayerForm({ action, player, submitLabel, cancelHref }: Props) {
         <Field {...field("first_name")} label="First name" autoComplete="off" required />
         <Field {...field("last_name")} label="Last name" autoComplete="off" required />
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-[5rem_1fr_1fr] gap-3">
+        <Field {...field("jersey_number")} label="Jersey" inputMode="numeric" placeholder="#" />
         <Field {...field("grad_year")} label="Grad year" inputMode="numeric" placeholder="2027" />
         <Field {...field("position")} label="Position" placeholder="Midfielder" />
       </div>

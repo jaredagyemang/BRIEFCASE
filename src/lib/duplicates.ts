@@ -19,8 +19,15 @@ export function duplicateKey(p: NameAndYear) {
   return `${normalize(p.first_name)}|${normalize(p.last_name)}|${p.grad_year ?? ""}`;
 }
 
-export function describePlayer(p: NameAndYear & { position?: string | null; club_team?: string | null }) {
-  return [p.grad_year && `'${String(p.grad_year).slice(-2)}`, p.position, p.club_team]
+export function describePlayer(
+  p: NameAndYear & { jersey_number?: string | null; position?: string | null; club_team?: string | null },
+) {
+  return [
+    p.jersey_number && `#${p.jersey_number}`,
+    p.grad_year && `'${String(p.grad_year).slice(-2)}`,
+    p.position,
+    p.club_team,
+  ]
     .filter(Boolean)
     .join(" · ");
 }
