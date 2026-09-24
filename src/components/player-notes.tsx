@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { saveTextNote, transcribeNote, uploadVoiceNote } from "@/app/players/notes-actions";
+import {
+  deleteNote,
+  saveTextNote,
+  transcribeNote,
+  updateNote,
+  uploadVoiceNote,
+} from "@/app/players/notes-actions";
+import { Sheet, SheetButton, SheetTitle } from "@/components/sheet";
+import { inputClass } from "@/components/ui";
 
 export type NoteItem = {
   id: string;
@@ -11,6 +19,9 @@ export type NoteItem = {
   isVoice: boolean;
   author: string | null;
   when: string;
+  // Whether the signed-in user may edit/delete it (they wrote it, or it has
+  // no author).
+  canEdit: boolean;
 };
 
 const MAX_SECONDS = 5 * 60;
@@ -41,6 +52,11 @@ export function PlayerNotes({ playerId, notes }: { playerId: string; notes: Note
   const [uploading, setUploading] = useState(false);
   const [transcribing, setTranscribing] = useState<Set<string>>(new Set());
   const [transcribeErrors, setTranscribeErrors] = useState<Record<string, string>>({});
+
+  const [editing, setEditing] = useState<{ id: string; draft: string } | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<NoteItem | null>(null);
+  const [savingEdit, startSavingEdit] = useTransition();
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -162,6 +178,33 @@ export function PlayerNotes({ playerId, notes }: { playerId: string; notes: Note
       return next;
     });
     if (!result.ok) setTranscribeErrors((errs) => ({ ...errs, [noteId]: result.error }));
+  }
+
+  function startEditing(note: NoteItem) {
+    setEditError(null);
+    setEditing({ id: note.id, draft: note.text ?? "" });
+  }
+
+  function saveEdit() {
+    if (!editing) return;
+    const { id, draft } = editing;
+    setEditError(null);
+    startSavingEdit(async () => {
+      const result = await updateNote(id, draft);
+      // Only close the editor if it's still showing this note.
+      if (result.ok) setEditing((current) => (current?.id === id ? null : current));
+      else setEditError(result.error);
+    });
+  }
+
+  function removeNote(note: NoteItem) {
+    setEditError(null);
+    startSavingEdit(async () => {
+      const result = await deleteNote(note.id);
+      setConfirmDelete(null);
+      if (result.ok) setEditing((current) => (current?.id === note.id ? null : current));
+      else setEditError(result.error);
+    });
   }
 
   function discardPending() {
@@ -286,44 +329,130 @@ export function PlayerNotes({ playerId, notes }: { playerId: string; notes: Note
               <p className="mt-1.5 text-xs text-muted">🎙️ Voice · just now</p>
             </li>
           ))}
-          {notes.map((note) => (
-            <li key={note.id} className="rounded-2xl bg-surface px-4 py-3">
-              {note.text !== null ? (
-                note.text ? (
-                  <p className="break-words whitespace-pre-wrap">{note.text}</p>
-                ) : (
-                  <p className="text-muted italic">No speech detected</p>
-                )
-              ) : transcribing.has(note.id) ? (
-                <p className="flex items-center gap-2 text-muted">
-                  <Spinner /> Transcribing…
-                </p>
-              ) : (
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm text-muted">
-                    {transcribeErrors[note.id] ?? "Not transcribed yet."}
-                  </p>
+          {notes.map((note) =>
+            editing?.id === note.id ? (
+              <li key={note.id} className="rounded-2xl bg-surface p-3 ring-2 ring-accent/40">
+                <textarea
+                  value={editing.draft}
+                  onChange={(e) => setEditing({ id: note.id, draft: e.target.value })}
+                  rows={3}
+                  maxLength={5000}
+                  autoFocus
+                  aria-label="Edit note"
+                  className={`${inputClass} resize-y`}
+                />
+                {note.audioUrl && (
+                  <audio src={note.audioUrl} controls preload="none" className="mt-2 h-9 w-full" />
+                )}
+                {editError && <p className="mt-2 px-1 text-sm text-red">{editError}</p>}
+                <div className="mt-3 flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => transcribe(note.id)}
-                    className="shrink-0 rounded-full bg-surface-muted px-3.5 py-1.5 text-sm font-semibold"
+                    onClick={() => setConfirmDelete(note)}
+                    disabled={savingEdit}
+                    className="rounded-full px-3 py-2 text-sm font-semibold text-red disabled:opacity-60"
                   >
-                    Retry
+                    Delete
+                  </button>
+                  <span className="flex-1" />
+                  <button
+                    type="button"
+                    onClick={() => setEditing(null)}
+                    disabled={savingEdit}
+                    className="rounded-full bg-surface-muted px-4 py-2 text-sm font-semibold disabled:opacity-60"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={saveEdit}
+                    disabled={savingEdit || !editing.draft.trim()}
+                    className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-40"
+                  >
+                    {savingEdit ? "Saving…" : "Save"}
                   </button>
                 </div>
-              )}
-              {note.audioUrl && (
-                <audio src={note.audioUrl} controls preload="none" className="mt-2 h-9 w-full" />
-              )}
-              <p className="mt-1.5 text-xs text-muted">
-                {note.isVoice ? "🎙️ Voice · " : ""}
-                {note.author ?? "Shared login"} · {note.when}
-              </p>
-            </li>
-          ))}
+              </li>
+            ) : (
+              <li key={note.id} className="rounded-2xl bg-surface px-4 py-3">
+                {note.text !== null ? (
+                  <NoteText note={note} onEdit={note.canEdit ? () => startEditing(note) : undefined} />
+                ) : transcribing.has(note.id) ? (
+                  <p className="flex items-center gap-2 text-muted">
+                    <Spinner /> Transcribing…
+                  </p>
+                ) : (
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm text-muted">
+                      {transcribeErrors[note.id] ?? "Not transcribed yet."}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => transcribe(note.id)}
+                      className="shrink-0 rounded-full bg-surface-muted px-3.5 py-1.5 text-sm font-semibold"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
+                {note.audioUrl && (
+                  <audio src={note.audioUrl} controls preload="none" className="mt-2 h-9 w-full" />
+                )}
+                <div className="mt-1.5 flex items-center justify-between gap-2 text-xs text-muted">
+                  <span>
+                    {note.isVoice ? "🎙️ Voice · " : ""}
+                    {note.author ?? "Shared login"} · {note.when}
+                  </span>
+                  {note.canEdit && !transcribing.has(note.id) && (
+                    <button
+                      type="button"
+                      onClick={() => startEditing(note)}
+                      className="-my-1 rounded-full px-2 py-1 font-semibold text-accent"
+                    >
+                      Edit
+                    </button>
+                  )}
+                </div>
+              </li>
+            ),
+          )}
         </ul>
       )}
+      {confirmDelete && (
+        <Sheet onClose={() => setConfirmDelete(null)}>
+          <SheetTitle
+            icon={<span className="mb-2 block text-4xl">🗑️</span>}
+            title="Delete this note?"
+            subtitle={
+              confirmDelete.isVoice
+                ? "The note and its recording will be permanently deleted."
+                : "This note will be permanently deleted."
+            }
+          />
+          <SheetButton variant="danger" disabled={savingEdit} onClick={() => removeNote(confirmDelete)}>
+            {savingEdit ? "Deleting…" : "Delete note"}
+          </SheetButton>
+          <SheetButton disabled={savingEdit} onClick={() => setConfirmDelete(null)}>
+            Cancel
+          </SheetButton>
+        </Sheet>
+      )}
     </section>
+  );
+}
+
+// A note's text; tapping it starts editing when the user is allowed to.
+function NoteText({ note, onEdit }: { note: NoteItem; onEdit?: () => void }) {
+  const content = note.text ? (
+    <p className="break-words whitespace-pre-wrap">{note.text}</p>
+  ) : (
+    <p className="text-muted italic">No speech detected</p>
+  );
+  if (!onEdit) return content;
+  return (
+    <button type="button" onClick={onEdit} aria-label="Edit note" className="block w-full text-left">
+      {content}
+    </button>
   );
 }
 

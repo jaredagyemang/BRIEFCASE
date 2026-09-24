@@ -2,6 +2,7 @@
 
 import { useEffect, useOptimistic, useState, useTransition } from "react";
 import { TRAFFIC_LIGHTS, type TrafficLight } from "@/lib/players";
+import { Sheet, SheetButton, SheetTitle } from "@/components/sheet";
 import {
   queueForOutreach,
   ratePlayer,
@@ -115,12 +116,12 @@ export function RatingButtons({
       {error && <p className="mt-2 px-1 text-sm text-red">{error}</p>}
 
       {followUp && (
-        <FollowUpSheet onClose={() => setFollowUp(null)}>
+        <Sheet onClose={() => setFollowUp(null)}>
           {followUp === "green" ? (
             <>
-              <SheetTitle dot="bg-green" title="Rated Green" subtitle="Queue for Outreach?" />
+              <SheetTitle icon={<RatingDot className="bg-green" />} title="Rated Green" subtitle="Queue for Outreach?" />
               <SheetButton
-                primary
+                variant="primary"
                 disabled={pending}
                 onClick={() =>
                   followUpAction(() => queueForOutreach(playerId), "Queued for outreach")
@@ -136,12 +137,12 @@ export function RatingButtons({
           ) : (
             <>
               <SheetTitle
-                dot="bg-yellow"
+                icon={<RatingDot className="bg-yellow" />}
                 title="Rated Yellow"
                 subtitle="Moved to Watch Again. What's next?"
               />
               <SheetButton
-                primary
+                variant="primary"
                 disabled={pending}
                 onClick={() =>
                   followUpAction(() => requestFilmAndInfo(playerId), "Film & info request saved")
@@ -155,7 +156,7 @@ export function RatingButtons({
               {receipt && <UndoLink disabled={pending} onClick={() => undo(receipt)} />}
             </>
           )}
-        </FollowUpSheet>
+        </Sheet>
       )}
 
       {toast && (
@@ -184,33 +185,6 @@ export function RatingButtons({
   );
 }
 
-function FollowUpSheet({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center sm:items-center">
-      <button
-        type="button"
-        aria-label="Close"
-        onClick={onClose}
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
-        className="relative w-full max-w-md space-y-3 rounded-t-3xl bg-surface p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl sm:rounded-3xl"
-      >
-        <div className="mx-auto mb-2 h-1.5 w-10 rounded-full bg-border sm:hidden" />
-        {children}
-      </div>
-    </div>
-  );
-}
-
 function UndoLink({ onClick, disabled }: { onClick: () => void; disabled: boolean }) {
   return (
     <button
@@ -224,27 +198,6 @@ function UndoLink({ onClick, disabled }: { onClick: () => void; disabled: boolea
   );
 }
 
-function SheetTitle({ dot, title, subtitle }: { dot: string; title: string; subtitle: string }) {
-  return (
-    <div className="pb-2 text-center">
-      <span className={`mx-auto mb-3 block h-10 w-10 rounded-full ${dot}`} />
-      <p className="text-lg font-semibold">{title}</p>
-      <p className="text-muted">{subtitle}</p>
-    </div>
-  );
-}
-
-function SheetButton({
-  primary,
-  ...props
-}: { primary?: boolean } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button
-      type="button"
-      className={`w-full rounded-2xl py-3.5 font-semibold transition disabled:opacity-60 ${
-        primary ? "bg-accent text-accent-foreground" : "bg-surface-muted"
-      }`}
-      {...props}
-    />
-  );
+function RatingDot({ className }: { className: string }) {
+  return <span className={`mx-auto mb-3 block h-10 w-10 rounded-full ${className}`} />;
 }

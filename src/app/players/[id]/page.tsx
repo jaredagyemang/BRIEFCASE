@@ -6,6 +6,7 @@ import { RatingButtons } from "@/components/rating-buttons";
 import { StatusSelect } from "@/components/status-select";
 import { TASK_LABELS, TRAFFIC_LIGHTS, type TaskType, type TrafficLight } from "@/lib/players";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/staff";
 import { timeAgo } from "@/lib/time";
 import { getPlayer } from "./data";
 
@@ -14,6 +15,7 @@ type NoteRow = {
   transcript_text: string | null;
   raw_audio_url: string | null;
   created_at: string;
+  rated_by: string | null;
   author: { full_name: string } | null;
 };
 
@@ -30,7 +32,7 @@ function lightFor(rating: TrafficLight) {
 
 export default async function PlayerPage({ params }: PageProps<"/players/[id]">) {
   const { id } = await params;
-  const player = await getPlayer(id);
+  const [player, currentUser] = await Promise.all([getPlayer(id), getCurrentUser()]);
 
   const supabase = await createClient();
   const [{ data: ratings }, { data: openTasks }, { data: noteRows }] = await Promise.all([
@@ -51,7 +53,7 @@ export default async function PlayerPage({ params }: PageProps<"/players/[id]">)
     // Notes: evaluations with typed/transcribed text or a voice recording.
     supabase
       .from("evaluations")
-      .select("id, transcript_text, raw_audio_url, created_at, author:staff(full_name)")
+      .select("id, transcript_text, raw_audio_url, created_at, rated_by, author:staff(full_name)")
       .eq("player_id", id)
       .or("transcript_text.not.is.null,raw_audio_url.not.is.null")
       .order("created_at", { ascending: false })
@@ -72,6 +74,7 @@ export default async function PlayerPage({ params }: PageProps<"/players/[id]">)
     isVoice: Boolean(n.raw_audio_url),
     author: n.author?.full_name ?? null,
     when: timeAgo(n.created_at),
+    canEdit: !n.rated_by || n.rated_by === currentUser?.id,
   }));
   const latestEval = ratings?.[0];
   const latestLight = TRAFFIC_LIGHTS.find((l) => l.value === player.traffic_light);

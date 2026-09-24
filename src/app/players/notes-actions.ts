@@ -114,3 +114,71 @@ export async function transcribeNote(noteId: string): Promise<NoteResult<{ text:
   revalidatePath(`/players/${note.player_id}`);
   return { ok: true, text };
 }
+
+type OwnedNote = {
+  player_id: string;
+  raw_audio_url: string | null;
+  traffic_light_rating: string | null;
+  rated_by: string | null;
+};
+
+// Loads a note the signed-in user may change: their own notes, plus old
+// notes from the shared login that have no author.
+async function loadEditableNote(noteId: string) {
+  const supabase = await createAuthedClient();
+  const { data: auth } = await supabase.auth.getClaims();
+  const userId = auth?.claims?.sub;
+
+  const { data: note } = await supabase
+    .from("evaluations")
+    .select("player_id, raw_audio_url, traffic_light_rating, rated_by")
+    .eq("id", noteId)
+    .maybeSingle<OwnedNote>();
+
+  if (!note || note.traffic_light_rating) {
+    return { supabase, note: null, error: "Couldn't find that note." } as const;
+  }
+  if (note.rated_by && note.rated_by !== userId) {
+    return { supabase, note: null, error: "Only the person who wrote this note can change it." } as const;
+  }
+  return { supabase, note, error: null } as const;
+}
+
+// Corrects a note's text. A voice note keeps its original recording.
+export async function updateNote(noteId: string, text: string): Promise<NoteResult> {
+  const updated = text.trim();
+  if (!updated) return { ok: false, error: "A note can't be empty. Delete it instead." };
+  if (updated.length > NOTE_MAX) {
+    return { ok: false, error: `Keep notes under ${NOTE_MAX.toLocaleString()} characters.` };
+  }
+
+  const { supabase, note, error } = await loadEditableNote(noteId);
+  if (!note) return { ok: false, error };
+
+  const { error: updateError } = await supabase
+    .from("evaluations")
+    .update({ transcript_text: updated })
+    .eq("id", noteId);
+  if (updateError) return { ok: false, error: "Couldn't save your changes. Try again." };
+
+  revalidatePath(`/players/${note.player_id}`);
+  return { ok: true };
+}
+
+// Removes a note and, for voice notes, its recording.
+export async function deleteNote(noteId: string): Promise<NoteResult> {
+  const { supabase, note, error } = await loadEditableNote(noteId);
+  if (!note) return { ok: false, error };
+
+  const { error: deleteError } = await supabase.from("evaluations").delete().eq("id", noteId);
+  if (deleteError) return { ok: false, error: "Couldn't delete the note. Try again." };
+
+  // The note is gone either way; a leftover file is only wasted storage.
+  if (note.raw_audio_url) {
+    const { error: removeError } = await supabase.storage.from(BUCKET).remove([note.raw_audio_url]);
+    if (removeError) console.error("Couldn't remove voice note file", note.raw_audio_url, removeError);
+  }
+
+  revalidatePath(`/players/${note.player_id}`);
+  return { ok: true };
+}
