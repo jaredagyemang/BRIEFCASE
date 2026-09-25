@@ -25,7 +25,7 @@ const AUDIO_EXTENSIONS: Record<string, string> = {
   "audio/wav": "wav",
 };
 
-export async function saveTextNote(playerId: string, text: string): Promise<NoteResult> {
+export async function saveTextNote(eventId: string, playerId: string, text: string): Promise<NoteResult> {
   const note = text.trim();
   if (!note) return { ok: false, error: "Write something first." };
   if (note.length > NOTE_MAX) {
@@ -35,16 +35,17 @@ export async function saveTextNote(playerId: string, text: string): Promise<Note
   const supabase = await createAuthedClient();
   const { error } = await supabase
     .from("evaluations")
-    .insert({ player_id: playerId, transcript_text: note });
+    .insert({ event_id: eventId, player_id: playerId, transcript_text: note });
   if (error) return { ok: false, error: "Couldn't save the note. Check your connection and try again." };
 
-  revalidatePath(`/players/${playerId}`);
+  revalidatePath("/events", "layout");
   return { ok: true };
 }
 
 // Step 1 of a voice note: store the recording and create the note, so the
 // audio is safe before transcription is attempted.
 export async function uploadVoiceNote(
+  eventId: string,
   playerId: string,
   formData: FormData,
 ): Promise<NoteResult<{ noteId: string }>> {
@@ -69,7 +70,7 @@ export async function uploadVoiceNote(
 
   const { data, error } = await supabase
     .from("evaluations")
-    .insert({ player_id: playerId, raw_audio_url: path })
+    .insert({ event_id: eventId, player_id: playerId, raw_audio_url: path })
     .select("id")
     .single();
   if (error) {
@@ -77,7 +78,7 @@ export async function uploadVoiceNote(
     return { ok: false, error: "Couldn't save the recording. Try again." };
   }
 
-  revalidatePath(`/players/${playerId}`);
+  revalidatePath("/events", "layout");
   return { ok: true, noteId: data.id };
 }
 
@@ -114,7 +115,7 @@ export async function transcribeNote(noteId: string): Promise<NoteResult<{ text:
   // Row-Level Security blocks updates to other people's notes silently.
   if (!updated?.length) return { ok: false, error: "Only the person who recorded this note can transcribe it." };
 
-  revalidatePath(`/players/${note.player_id}`);
+  revalidatePath("/events", "layout");
   return { ok: true, text };
 }
 
@@ -166,7 +167,7 @@ export async function updateNote(noteId: string, text: string): Promise<NoteResu
   if (updateError) return { ok: false, error: "Couldn't save your changes. Try again." };
   if (!changed?.length) return { ok: false, error: "Only the person who wrote this note can change it." };
 
-  revalidatePath(`/players/${note.player_id}`);
+  revalidatePath("/events", "layout");
   return { ok: true };
 }
 
@@ -189,6 +190,6 @@ export async function deleteNote(noteId: string): Promise<NoteResult> {
     if (removeError) console.error("Couldn't remove voice note file", note.raw_audio_url, removeError);
   }
 
-  revalidatePath(`/players/${note.player_id}`);
+  revalidatePath("/events", "layout");
   return { ok: true };
 }

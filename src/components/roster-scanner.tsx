@@ -8,8 +8,10 @@ import {
   saveRosterPlayers,
   scanRoster,
   type RosterRow,
-} from "@/app/players/scan/actions";
-import { duplicateKey, type DuplicateMatch } from "@/lib/duplicates";
+} from "@/app/events/scan-actions";
+import type { PlayerDuplicate } from "@/app/players/actions";
+import { duplicateKey } from "@/lib/duplicates";
+import { eventPath } from "@/lib/events";
 
 // Claude reads images up to 2576px on the long edge; shrinking phone photos
 // to that keeps uploads fast on event Wi-Fi without losing detail.
@@ -34,13 +36,27 @@ async function preparePhoto(file: File): Promise<Blob> {
 type Item = {
   id: number;
   row: RosterRow;
-  matches: DuplicateMatch[];
-  // For rows matching an existing player: save anyway (off = skip this row).
-  addAnyway: boolean;
+  // Existing players with the same name and grad year.
+  matches: PlayerDuplicate[];
+  choice: Choice;
   error?: string;
 };
 
 type Stage = "capture" | "scanning" | "review";
+
+// What happens to a row on save.
+type Choice =
+  | { kind: "existing"; playerId: string } // add this existing player to the event
+  | { kind: "new" } // create a new player
+  | { kind: "skip" }; // already in this event
+
+// A match you've seen again is most likely the same person, so default to
+// adding them to this event; skip players who are already in it.
+function defaultChoice(matches: PlayerDuplicate[]): Choice {
+  const available = matches.find((m) => !m.inEvent);
+  if (available) return { kind: "existing", playerId: available.id };
+  return matches.length > 0 ? { kind: "skip" } : { kind: "new" };
+}
 
 const cellClass =
   "min-w-0 rounded-xl border border-border bg-background px-3 py-2 text-base outline-none focus:border-accent focus:ring-4 focus:ring-accent/15 placeholder:text-muted";
@@ -59,7 +75,7 @@ const emptyRow = (club_team: string): RosterRow => ({
   gpa_note: null,
 });
 
-export function RosterScanner() {
+export function RosterScanner({ eventId, eventName }: { eventId: string; eventName: string }) {
   const router = useRouter();
   const [stage, setStage] = useState<Stage>("capture");
   const [error, setError] = useState<string | null>(null);
@@ -93,7 +109,7 @@ export function RosterScanner() {
     form.append("photo", await preparePhoto(file));
     let result: Awaited<ReturnType<typeof scanRoster>>;
     try {
-      result = await scanRoster(form);
+      result = await scanRoster(eventId, form);
     } catch {
       result = { ok: false, error: "Couldn't reach the server. Check your connection and try again." };
     }
@@ -104,7 +120,10 @@ export function RosterScanner() {
     }
     setClubForAll(result.teamName);
     setItems(
-      result.rows.map((row, i) => ({ id: nextId++, row, matches: result.matches[i] ?? [], addAnyway: false })),
+      result.rows.map((row, i) => {
+        const matches = result.matches[i] ?? [];
+        return { id: nextId++, row, matches, choice: defaultChoice(matches) };
+      }),
     );
     setStage("review");
   }
@@ -114,14 +133,14 @@ export function RosterScanner() {
     if (checkTimer.current) clearTimeout(checkTimer.current);
     checkTimer.current = setTimeout(async () => {
       try {
-        const matches = await checkRosterDuplicates(next.map((it) => it.row));
+        const matches = await checkRosterDuplicates(eventId, next.map((it) => it.row));
         setItems((current) =>
           current.map((it) => {
             const i = next.findIndex((n) => n.id === it.id);
             if (i === -1) return it;
             const updated = matches[i] ?? [];
             const same = updated.map((m) => m.id).join() === it.matches.map((m) => m.id).join();
-            return same ? it : { ...it, matches: updated, addAnyway: false };
+            return same ? it : { ...it, matches: updated, choice: defaultChoice(updated) };
           }),
         );
       } catch {
@@ -157,6 +176,10 @@ export function RosterScanner() {
     setItems((current) => current.map((it) => ({ ...it, row: { ...it.row, club_team: clubForAll.trim() } })));
   }
 
+  function setChoice(id: number, choice: Choice) {
+    setItems((current) => current.map((c) => (c.id === id ? { ...c, choice, error: undefined } : c)));
+  }
+
   function removeRow(id: number) {
     setItems((current) => current.filter((it) => it.id !== id));
   }
@@ -164,13 +187,14 @@ export function RosterScanner() {
   function addRow() {
     setItems((current) => [
       ...current,
-      { id: nextId++, row: emptyRow(clubForAll.trim()), matches: [], addAnyway: false },
+      { id: nextId++, row: emptyRow(clubForAll.trim()), matches: [], choice: { kind: "new" } },
     ]);
   }
 
   // Rows that will be saved: everything except possible duplicates the
   // person hasn't chosen to add anyway.
-  const toSave = items.filter((it) => it.matches.length === 0 || it.addAnyway);
+  const toSave = items.filter((it) => it.choice.kind !== "skip");
+  const existingCount = toSave.filter((it) => it.choice.kind === "existing").length;
 
   // Earlier row on this roster with the same name and grad year, if any.
   const sameAsEarlier = (index: number) => {
@@ -187,9 +211,13 @@ export function RosterScanner() {
       let result: Awaited<ReturnType<typeof saveRosterPlayers>>;
       try {
         result = await saveRosterPlayers({
+          eventId,
           rows: toSave.map((it) => ({
             ...it.row,
-            confirmedNotDuplicateOf: it.addAnyway ? it.matches.map((m) => m.id) : [],
+            choice:
+              it.choice.kind === "existing"
+                ? it.choice
+                : { kind: "new" as const, confirmedNotDuplicateOf: it.matches.map((m) => m.id) },
           })),
         });
       } catch {
@@ -197,7 +225,7 @@ export function RosterScanner() {
       }
       if (result.ok) {
         setItems([]);
-        router.push(`/players?added=${result.added}`);
+        router.push(`${eventPath(eventId)}?added=${result.added}`);
         return;
       }
       setError(result.error);
@@ -209,7 +237,7 @@ export function RosterScanner() {
           return {
             ...it,
             error: rowErrors?.[i],
-            ...(matches && matches[i]?.length ? { matches: matches[i], addAnyway: false } : {}),
+            ...(matches && matches[i]?.length ? { matches: matches[i], choice: defaultChoice(matches[i]) } : {}),
           };
         }),
       );
@@ -219,7 +247,7 @@ export function RosterScanner() {
   if (stage !== "review") {
     return (
       <div>
-        <Header />
+        <Header eventId={eventId} eventName={eventName} />
         <div className="mt-6 rounded-3xl bg-surface p-6 text-center">
           {stage === "scanning" ? (
             <>
@@ -287,7 +315,7 @@ export function RosterScanner() {
 
   return (
     <div className="pb-44 sm:pb-24">
-      <Header />
+      <Header eventId={eventId} eventName={eventName} />
 
       <div className="mt-4 rounded-3xl bg-surface p-4">
         <div className="flex items-center gap-3">
@@ -329,7 +357,7 @@ export function RosterScanner() {
 
       <ul className="mt-4 space-y-3">
         {items.map((it, index) => {
-          const skippedRow = it.matches.length > 0 && !it.addAnyway;
+          const skippedRow = it.choice.kind === "skip";
           const earlier = sameAsEarlier(index);
           return (
             <li
@@ -427,37 +455,49 @@ export function RosterScanner() {
                 </p>
               )}
               {it.matches.length > 0 && (
-                <div className="mt-2 rounded-xl bg-yellow/10 p-3">
+                <fieldset className="mt-2 rounded-xl bg-yellow/10 p-3">
+                  <legend className="sr-only">Row {index + 1}: already in Briefcase</legend>
                   <p className="text-sm font-semibold">⚠️ Already in Briefcase</p>
-                  {it.matches.map((m) => (
-                    <div key={m.id} className="mt-1 flex items-center justify-between gap-2 text-sm">
-                      <span className="min-w-0 truncate">
-                        {m.name}
-                        {m.detail && <span className="text-muted"> · {m.detail}</span>}
-                      </span>
-                      <Link
-                        href={`/players/${m.id}`}
-                        target="_blank"
-                        className="shrink-0 font-semibold text-accent"
-                      >
-                        View
-                      </Link>
-                    </div>
-                  ))}
-                  <label className="mt-2 flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={it.addAnyway}
-                      onChange={(e) =>
-                        setItems((current) =>
-                          current.map((c) => (c.id === it.id ? { ...c, addAnyway: e.target.checked } : c)),
-                        )
-                      }
-                      className="h-5 w-5 accent-accent"
-                    />
-                    Not the same person — add anyway
-                  </label>
-                </div>
+                  <div className="mt-1 space-y-1.5">
+                    {it.matches.map((m) => (
+                      <label key={m.id} className="flex items-start gap-2 text-sm">
+                        <input
+                          type="radio"
+                          name={`row-${it.id}`}
+                          checked={
+                            m.inEvent
+                              ? it.choice.kind === "skip"
+                              : it.choice.kind === "existing" && it.choice.playerId === m.id
+                          }
+                          onChange={() => setChoice(it.id, m.inEvent ? { kind: "skip" } : { kind: "existing", playerId: m.id })}
+                          className="mt-0.5 h-5 w-5 shrink-0 accent-accent"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="font-medium">
+                            {m.inEvent ? "Same person (already in this event)" : "Same person — add to this event"}
+                          </span>
+                          <span className="block truncate text-muted">
+                            {m.name}
+                            {m.detail && ` · ${m.detail}`}
+                          </span>
+                        </span>
+                        <Link href={`/players/${m.id}`} target="_blank" className="shrink-0 font-semibold text-accent">
+                          View
+                        </Link>
+                      </label>
+                    ))}
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="radio"
+                        name={`row-${it.id}`}
+                        checked={it.choice.kind === "new"}
+                        onChange={() => setChoice(it.id, { kind: "new" })}
+                        className="h-5 w-5 shrink-0 accent-accent"
+                      />
+                      <span className="font-medium">Different person — add as new</span>
+                    </label>
+                  </div>
+                </fieldset>
               )}
             </li>
           );
@@ -475,9 +515,15 @@ export function RosterScanner() {
       <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-10 border-t border-border bg-background/90 px-4 py-3 backdrop-blur-xl sm:bottom-0">
         <div className="mx-auto max-w-3xl">
           {error && <p className="mb-2 text-sm text-red">{error}</p>}
-          {skipped > 0 && !error && (
+          {!error && (existingCount > 0 || skipped > 0) && (
             <p className="mb-2 text-center text-sm text-muted">
-              Skipping {skipped} already in Briefcase
+              {[
+                existingCount > 0 && `${existingCount} already in Briefcase`,
+                toSave.length - existingCount > 0 && `${toSave.length - existingCount} new`,
+                skipped > 0 && `${skipped} already in this event`,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             </p>
           )}
           <button
@@ -488,7 +534,7 @@ export function RosterScanner() {
           >
             {saving
               ? "Adding…"
-              : `Add ${toSave.length} player${toSave.length === 1 ? "" : "s"}`}
+              : `Add ${toSave.length} player${toSave.length === 1 ? "" : "s"} to event`}
           </button>
         </div>
       </div>
@@ -538,14 +584,14 @@ function ApplyToAll({
   );
 }
 
-function Header() {
+function Header({ eventId, eventName }: { eventId: string; eventName: string }) {
   return (
-    <div className="flex items-center justify-between">
-      <Link href="/players" className="text-accent">
-        ‹ Players
+    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+      <Link href={eventPath(eventId)} className="truncate text-accent">
+        ‹ {eventName}
       </Link>
       <h1 className="text-lg font-semibold">Scan roster</h1>
-      <span className="w-16" />
+      <span />
     </div>
   );
 }

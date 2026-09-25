@@ -20,7 +20,6 @@ export type Player = {
   id: string;
   first_name: string;
   last_name: string;
-  jersey_number: string | null;
   grad_year: number | null;
   position: string | null;
   club_team: string | null;
@@ -28,8 +27,9 @@ export type Player = {
   gpa: string | null;
   phone: string | null;
   email: string | null;
-  traffic_light: TrafficLight | null;
   lifecycle_status: LifecycleStatus;
+  // The event where the overall status was last set.
+  status_event_id: string | null;
   created_at: string;
   updated_at: string;
 };
