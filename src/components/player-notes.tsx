@@ -40,7 +40,7 @@ function formatDuration(seconds: number) {
 // A recording that hasn't made it to the server yet (kept so it's never lost).
 type PendingRecording = { blob: Blob; url: string; error: string | null };
 
-export function PlayerNotes({ playerId, notes }: { playerId: string; notes: NoteItem[] }) {
+export function PlayerNotes({ eventId, playerId, notes }: { eventId: string; playerId: string; notes: NoteItem[] }) {
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
@@ -80,7 +80,7 @@ export function PlayerNotes({ playerId, notes }: { playerId: string; notes: Note
   function saveText() {
     setError(null);
     startSaving(async () => {
-      const result = await saveTextNote(playerId, text);
+      const result = await saveTextNote(eventId, playerId, text);
       if (result.ok) setText("");
       else setError(result.error);
     });
@@ -142,7 +142,7 @@ export function PlayerNotes({ playerId, notes }: { playerId: string; notes: Note
 
     let result: Awaited<ReturnType<typeof uploadVoiceNote>>;
     try {
-      result = await uploadVoiceNote(playerId, form);
+      result = await uploadVoiceNote(eventId, playerId, form);
     } catch {
       result = { ok: false, error: "Couldn't reach the server. Check your connection and try again." };
     }

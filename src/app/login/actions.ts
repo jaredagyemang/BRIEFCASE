@@ -19,7 +19,7 @@ export async function signIn(
   if (error) {
     return { error: "That email and password didn't match.", email };
   }
-  redirect("/players");
+  redirect("/events");
 }
 
 export async function signOut() {

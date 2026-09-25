@@ -8,12 +8,11 @@ type NameAndYear = { first_name: string; last_name: string; grad_year: number | 
 
 type Candidate = NameAndYear & {
   id: string;
-  jersey_number: string | null;
   position: string | null;
   club_team: string | null;
 };
 
-const CANDIDATE_COLUMNS = "id, first_name, last_name, jersey_number, grad_year, position, club_team";
+const CANDIDATE_COLUMNS = "id, first_name, last_name, grad_year, position, club_team";
 
 function toMatch(c: Candidate): DuplicateMatch {
   return { id: c.id, name: `${c.first_name} ${c.last_name}`, detail: describePlayer(c) };

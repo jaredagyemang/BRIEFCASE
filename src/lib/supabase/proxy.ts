@@ -42,7 +42,7 @@ export async function updateSession(request: NextRequest) {
 
   if (signedIn && onLogin) {
     const url = request.nextUrl.clone();
-    url.pathname = "/players";
+    url.pathname = "/events";
     url.search = "";
     return NextResponse.redirect(url);
   }

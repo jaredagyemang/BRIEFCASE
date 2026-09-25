@@ -20,10 +20,13 @@ type Toast = { message: string; undo?: RatingReceipt };
 // toast (Red). Tapping the current color reopens its sheet/toast instead of
 // saving a duplicate rating.
 export function RatingButtons({
+  eventId,
   playerId,
   rating,
 }: {
+  eventId: string;
   playerId: string;
+  // This player's rating at this event.
   rating: TrafficLight | null;
 }) {
   const [optimisticRating, setOptimisticRating] = useOptimistic(rating);
@@ -61,7 +64,7 @@ export function RatingButtons({
       setOptimisticRating(next);
       let receipt: RatingReceipt | null;
       try {
-        receipt = await ratePlayer(playerId, next);
+        receipt = await ratePlayer(eventId, playerId, next);
       } catch {
         setError("Couldn't save the rating. Check your connection and try again.");
         return;
@@ -81,7 +84,7 @@ export function RatingButtons({
     setError(null);
     startTransition(async () => {
       try {
-        await undoRating(playerId, receipt);
+        await undoRating(eventId, playerId, receipt);
       } catch {
         setError("Couldn't undo. Refresh the page and try again.");
         return;
@@ -100,7 +103,7 @@ export function RatingButtons({
         if (kind) {
           const result =
             kind === "outreach"
-              ? await queueForOutreach(playerId)
+              ? await queueForOutreach(eventId, playerId)
               : { status: undefined, ...(await requestFilmAndInfo(playerId)) };
           setHistory((h) =>
             h.map((r, i) =>

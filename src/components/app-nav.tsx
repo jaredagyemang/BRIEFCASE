@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const tabs = [
-  { href: "/players", label: "Players", icon: "🏃" },
+  { href: "/events", label: "Events", icon: "🏟️" },
 ];
 
 // Top bar on larger screens, iOS-style bottom tab bar on phones. The Profile
