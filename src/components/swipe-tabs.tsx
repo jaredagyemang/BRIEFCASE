@@ -24,14 +24,13 @@ export function SwipeTabs({
   const paneRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [active, setActive] = useState(() => Math.max(0, tabs.findIndex((t) => t.id === initialTab)));
   const [height, setHeight] = useState<number>();
-  // Height changes only animate once someone switches tabs. On arrival the
-  // height is set before the first paint, so a screen sliding in (switching
-  // modes) is already its final size and nothing moves mid-slide.
+  // Height changes only animate once someone switches tabs, so a screen
+  // sliding in (switching modes) is already its final size and nothing on it
+  // moves mid-slide.
   const [animateHeight, setAnimateHeight] = useState(false);
   // Until measured, hidden panes are collapsed so the slider already has the
-  // visible pane's height from the very first frame, with no JavaScript. The
-  // measurement can land mid-slide (React defers effects while a view
-  // transition runs) but then changes nothing on screen.
+  // visible pane's height from the very first frame, with no JavaScript; the
+  // measurement then changes nothing on screen.
   const [measured, setMeasured] = useState(false);
 
   const scrollTo = useCallback((index: number, behavior: ScrollBehavior) => {

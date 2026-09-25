@@ -1,5 +1,5 @@
-import { ModeTransition } from "@/components/mode-transition";
+import { PageScroller } from "@/components/page-scroller";
 
 export default function DocketLayout({ children }: LayoutProps<"/docket">) {
-  return <ModeTransition mode="docket">{children}</ModeTransition>;
+  return <PageScroller>{children}</PageScroller>;
 }

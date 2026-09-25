@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { MODES, modeIndexFor } from "@/lib/modes";
+import { finishModeSlide, startModeSlide } from "@/lib/mode-slide";
 
 const LAST = MODES.length - 1;
 const clamp = (i: number) => Math.min(LAST, Math.max(0, i));
@@ -59,7 +60,7 @@ export function AppNav() {
   // Re-read on every render: remember() runs just before each switch.
   const hrefs = useSyncExternalStore(subscribeNoop, readDestinations, () => ROOTS).split("\n");
 
-  // Links are fully prefetched so a switch lands in one smooth slide. The
+  // Links are fully prefetched so a switch starts sliding right away. The
   // prefetched copy can be a few minutes old, so refresh once on arrival.
   const arrivedFrom = useRef(current);
   useEffect(() => {
@@ -88,11 +89,14 @@ export function AppNav() {
     remember(current);
     setPending({ index: target, from: pathname });
     if ("vibrate" in navigator) navigator.vibrate(8);
-    const direction = target > current ? "forward" : "back";
-    // The slide's CSS reads the direction from <html> (see globals.css).
-    document.documentElement.dataset.modeDir = direction;
-    router.push(destination(target), { transitionTypes: [`mode-${direction}`] });
+    startModeSlide(target > current ? 1 : -1, pathname);
+    router.push(destination(target));
   }
+
+  // The new mode's page has been committed: slide it in before it's painted.
+  useLayoutEffect(() => {
+    finishModeSlide(pathname);
+  }, [pathname]);
 
   const onPageSwipe = useEffectEvent((direction: 1 | -1) => {
     const target = clamp(current + direction);
@@ -186,7 +190,6 @@ export function AppNav() {
   return (
     <>
       <header
-        style={{ viewTransitionName: "site-header" }}
         className="z-20 flex-none border-b border-border bg-background"
       >
         <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4">
@@ -199,7 +202,6 @@ export function AppNav() {
 
       <nav
         aria-label="Modes"
-        style={{ viewTransitionName: "mode-switcher" }}
         className="pointer-events-none fixed inset-x-0 bottom-0 z-30 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]"
       >
         <div className="pointer-events-auto relative mx-auto max-w-md pt-4">

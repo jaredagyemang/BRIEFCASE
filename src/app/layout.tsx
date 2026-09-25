@@ -43,7 +43,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex h-dvh flex-col overflow-hidden font-sans">
         <AppNav />
         {/* Each screen scrolls inside its own PageScroller, not the document. */}
-        <main className="relative min-h-0 flex-1">{children}</main>
+        <main className="relative min-h-0 flex-1 overflow-hidden">{children}</main>
       </body>
     </html>
   );
