@@ -225,7 +225,7 @@ export default async function EventPlayerPage({ params, searchParams }: PageProp
   return (
     <div>
       <div className="flex items-center justify-between gap-3">
-        <Link href={eventPath(eventId)} className="min-w-0 truncate text-accent">
+        <Link href={eventPath(eventId)} className="min-w-0 truncate text-accent-ink">
           ‹ {event.name}
         </Link>
         <Link
@@ -284,7 +284,7 @@ export default async function EventPlayerPage({ params, searchParams }: PageProp
           ) : (
             <>
               Status set at{" "}
-              <Link href={eventPlayerPath(statusEvent.id, playerId)} className="font-medium text-accent">
+              <Link href={eventPlayerPath(statusEvent.id, playerId)} className="font-medium text-accent-ink">
                 {statusEvent.name}
               </Link>
             </>
@@ -293,7 +293,7 @@ export default async function EventPlayerPage({ params, searchParams }: PageProp
         {others.length > 0 && (
           <Link href="?tab=also" scroll={false} className="mt-3 text-sm">
             <span className="text-muted">Also seen at: </span>
-            <span className="font-medium text-accent">{others.map((a) => a.event.name).join(", ")}</span>
+            <span className="font-medium text-accent-ink">{others.map((a) => a.event.name).join(", ")}</span>
           </Link>
         )}
       </div>

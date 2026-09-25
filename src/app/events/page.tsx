@@ -31,7 +31,11 @@ export default async function EventsPage({ searchParams }: PageProps<"/events">)
 
   return (
     <div>
-      <h1 className="text-3xl font-bold tracking-tight">Events</h1>
+      <p className="text-sm font-semibold tracking-wide text-accent-ink uppercase">Events Mode</p>
+      <h1 className="text-3xl font-bold tracking-tight">
+        Showcases/<wbr />
+        Tournaments
+      </h1>
 
       <Link
         href="/events/new"

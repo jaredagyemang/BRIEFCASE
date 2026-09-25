@@ -80,7 +80,7 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
   return (
     <div>
       <div className="flex items-center justify-between">
-        <Link href="/events" className="text-accent">
+        <Link href="/events" className="text-accent-ink">
           ‹ Events
         </Link>
         <div className="flex gap-2">

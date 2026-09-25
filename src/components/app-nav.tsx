@@ -196,8 +196,8 @@ export function AppNav() {
           {/* The case handle, riveted in brass */}
           <div aria-hidden className="pointer-events-none absolute top-0 left-1/2 z-10 h-6 w-24 -translate-x-1/2">
             <div className="h-full rounded-t-full border-[5px] border-b-0 border-case" />
-            <div className="absolute bottom-0 -left-1 h-2 w-3.5 rounded-sm bg-brass" />
-            <div className="absolute -right-1 bottom-0 h-2 w-3.5 rounded-sm bg-brass" />
+            <div className="absolute bottom-0 -left-1 h-2 w-3.5 rounded-sm bg-accent" />
+            <div className="absolute -right-1 bottom-0 h-2 w-3.5 rounded-sm bg-accent" />
           </div>
 
           <div
@@ -251,8 +251,8 @@ export function AppNav() {
                 >
                   <span className="text-[15px] leading-tight font-semibold">{mode.label}</span>
                   <span
-                    className={`mt-0.5 text-[10px] font-semibold tracking-[0.12em] uppercase transition-opacity duration-300 ${
-                      i === highlighted ? "opacity-70" : "opacity-60"
+                    className={`mt-0.5 text-[10px] font-semibold tracking-[0.12em] uppercase transition-colors duration-300 ${
+                      i === highlighted ? "text-divider-accent" : "text-accent"
                     }`}
                   >
                     {mode.caption}

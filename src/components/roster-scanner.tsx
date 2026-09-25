@@ -481,7 +481,7 @@ export function RosterScanner({ eventId, eventName }: { eventId: string; eventNa
                             {m.detail && ` · ${m.detail}`}
                           </span>
                         </span>
-                        <Link href={`/players/${m.id}`} target="_blank" className="shrink-0 font-semibold text-accent">
+                        <Link href={`/players/${m.id}`} target="_blank" className="shrink-0 font-semibold text-accent-ink">
                           View
                         </Link>
                       </label>
@@ -587,7 +587,7 @@ function ApplyToAll({
 function Header({ eventId, eventName }: { eventId: string; eventName: string }) {
   return (
     <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-      <Link href={eventPath(eventId)} className="truncate text-accent">
+      <Link href={eventPath(eventId)} className="truncate text-accent-ink">
         ‹ {eventName}
       </Link>
       <h1 className="text-lg font-semibold">Scan roster</h1>
