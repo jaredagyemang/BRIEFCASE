@@ -1,79 +1,266 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore } from "react";
+import { MODES, modeIndexFor } from "@/lib/modes";
 
-const tabs = [
-  { href: "/events", label: "Events", icon: "🏟️" },
-];
+const LAST = MODES.length - 1;
+const clamp = (i: number) => Math.min(LAST, Math.max(0, i));
 
-// Top bar on larger screens, iOS-style bottom tab bar on phones. The Profile
-// tab (with Sign out) is always shown whenever someone is signed in.
-export function AppNav({ userName }: { userName: string | null }) {
+// Each compartment remembers where you were, so flipping back to Events
+// returns to the same event or player.
+const storageKey = (index: number) => `briefcase:mode:${MODES[index].id}`;
+
+function remember(index: number) {
+  try {
+    sessionStorage.setItem(storageKey(index), location.pathname + location.search);
+  } catch {}
+}
+
+function destination(index: number) {
+  const { root } = MODES[index];
+  try {
+    const saved = sessionStorage.getItem(storageKey(index));
+    if (saved && (saved === root || saved.startsWith(root + "/") || saved.startsWith(root + "?"))) return saved;
+  } catch {}
+  return root;
+}
+
+// Where each compartment's link points: its remembered page (read after
+// hydration; the server renders the plain roots).
+const ROOTS = MODES.map((m) => m.root).join("\n");
+const readDestinations = () => MODES.map((_, i) => destination(i)).join("\n");
+const subscribeNoop = () => () => {};
+
+// A page swipe only switches modes when it didn't start on something that
+// scrolls sideways itself (like the Active / Previous slider) or on a control.
+function swipeStartsOnScroller(el: Element | null) {
+  for (let node = el; node && node !== document.body; node = node.parentElement) {
+    const { overflowX } = getComputedStyle(node);
+    if ((overflowX === "auto" || overflowX === "scroll") && node.scrollWidth > node.clientWidth + 1) return true;
+  }
+  return false;
+}
+
+// Top-level navigation: the three compartments of the briefcase (Profile,
+// Events, The Docket) on a stitched leather rail. A cream divider card sits in
+// the open compartment; tap a compartment, drag the card, or swipe the page
+// sideways to flip to the next one.
+export function AppNav() {
   const pathname = usePathname();
+  const router = useRouter();
+  const current = modeIndexFor(pathname);
+  // Re-read on every render: remember() runs just before each switch.
+  const hrefs = useSyncExternalStore(subscribeNoop, readDestinations, () => ROOTS).split("\n");
+
+  // Links are fully prefetched so a switch lands in one smooth slide. The
+  // prefetched copy can be a few minutes old, so refresh once on arrival.
+  const arrivedFrom = useRef(current);
+  useEffect(() => {
+    if (arrivedFrom.current === current) return;
+    arrivedFrom.current = current;
+    router.refresh();
+  }, [current, router]);
+
+  // Move the divider as soon as it's tapped, before the new page arrives.
+  const [pending, setPending] = useState<{ index: number; from: string } | null>(null);
+  const shown = pending && pending.from === pathname ? pending.index : current;
+
+  const railRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ startX: number; step: number; moved: boolean } | null>(null);
+  const suppressClick = useRef(false);
+  const [drag, setDrag] = useState<{ dx: number; step: number } | null>(null);
+
+  function go(target: number) {
+    if (target === current) {
+      // Tapping the open compartment goes back to its front page.
+      if (pathname !== MODES[target].root) router.push(MODES[target].root);
+      return;
+    }
+    remember(current);
+    setPending({ index: target, from: pathname });
+    if ("vibrate" in navigator) navigator.vibrate(8);
+    router.push(destination(target), { transitionTypes: [target > current ? "mode-forward" : "mode-back"] });
+  }
+
+  const onPageSwipe = useEffectEvent((direction: 1 | -1) => {
+    const target = clamp(current + direction);
+    if (target !== current) go(target);
+  });
+
+  useEffect(() => {
+    if (pathname.startsWith("/login")) return;
+    let start: { x: number; y: number; time: number } | null = null;
+
+    function onStart(e: TouchEvent) {
+      start = null;
+      if (e.touches.length !== 1) return;
+      const touch = e.touches[0];
+      // Leave the screen edges to the browser's own back/forward swipe.
+      if (touch.clientX < 24 || touch.clientX > window.innerWidth - 24) return;
+      const target = e.target instanceof Element ? e.target : null;
+      if (
+        target?.closest('nav[aria-label="Modes"], input, textarea, select, audio, [contenteditable], [role=dialog]') ||
+        document.querySelector("[role=dialog]") ||
+        swipeStartsOnScroller(target)
+      ) {
+        return;
+      }
+      start = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+    }
+
+    function onEnd(e: TouchEvent) {
+      if (!start) return;
+      const touch = e.changedTouches[0];
+      const dx = touch.clientX - start.x;
+      const dy = touch.clientY - start.y;
+      if (Math.abs(dx) > 64 && Math.abs(dx) > 2 * Math.abs(dy) && Date.now() - start.time < 700) {
+        onPageSwipe(dx < 0 ? 1 : -1);
+      }
+      start = null;
+    }
+
+    document.addEventListener("touchstart", onStart, { passive: true });
+    document.addEventListener("touchend", onEnd, { passive: true });
+    return () => {
+      document.removeEventListener("touchstart", onStart);
+      document.removeEventListener("touchend", onEnd);
+    };
+  }, [pathname]);
+
   if (pathname.startsWith("/login")) return null;
 
-  const initial = userName?.[0]?.toUpperCase() ?? "?";
-  const profileActive = pathname.startsWith("/profile");
+  function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    suppressClick.current = false;
+    if (e.button !== 0 || !railRef.current) return;
+    // One compartment's width: the rail minus its padding, in thirds.
+    dragRef.current = { startX: e.clientX, step: (railRef.current.clientWidth - 12) / MODES.length, moved: false };
+  }
+
+  function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const d = dragRef.current;
+    if (!d) return;
+    const dx = e.clientX - d.startX;
+    if (!d.moved) {
+      if (Math.abs(dx) < 6) return;
+      d.moved = true;
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
+    // The card follows the finger, with a little give past either end.
+    const min = -shown * d.step - 10;
+    const max = (LAST - shown) * d.step + 10;
+    setDrag({ dx: Math.min(max, Math.max(min, dx)), step: d.step });
+  }
+
+  function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    const d = dragRef.current;
+    dragRef.current = null;
+    if (!d?.moved) return;
+    suppressClick.current = true;
+    setDrag(null);
+    const dx = e.clientX - d.startX;
+    let steps = Math.round(dx / d.step);
+    if (steps === 0 && Math.abs(dx) > d.step * 0.25) steps = Math.sign(dx);
+    const target = clamp(shown + steps);
+    if (target !== shown) go(target);
+  }
+
+  function onPointerCancel() {
+    dragRef.current = null;
+    setDrag(null);
+  }
+
+  const highlighted = drag === null ? shown : clamp(Math.round(shown + drag.dx / drag.step));
 
   return (
     <>
-      <header className="sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur-xl">
+      <header
+        style={{ viewTransitionName: "site-header" }}
+        className="sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur-xl"
+      >
         <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4">
           <Link href="/" className="text-lg font-semibold tracking-tight">
             💼 Briefcase
           </Link>
-          <nav className="hidden gap-1 sm:flex">
-            {[...tabs, { href: "/profile", label: "Profile" }].map((tab) => {
-              const active = pathname.startsWith(tab.href);
-              return (
-                <Link
-                  key={tab.href}
-                  href={tab.href}
-                  className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-                    active ? "bg-foreground text-background" : "text-muted hover:bg-surface-muted"
-                  }`}
-                >
-                  {tab.label}
-                </Link>
-              );
-            })}
-          </nav>
+          <span className="text-sm font-medium text-muted">{MODES[shown].caption}</span>
         </div>
       </header>
 
-      <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/85 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl sm:hidden">
-        <div className="mx-auto flex max-w-3xl">
-          {tabs.map((tab) => {
-            const active = pathname.startsWith(tab.href);
-            return (
-              <Link
-                key={tab.href}
-                href={tab.href}
-                className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-xs font-medium ${
-                  active ? "text-accent" : "text-muted"
-                }`}
-              >
-                <span className="text-xl leading-none">{tab.icon}</span>
-                {tab.label}
-              </Link>
-            );
-          })}
-          <Link
-            href="/profile"
-            className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-xs font-medium ${
-              profileActive ? "text-accent" : "text-muted"
-            }`}
+      <nav
+        aria-label="Modes"
+        style={{ viewTransitionName: "mode-switcher" }}
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-30 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]"
+      >
+        <div className="pointer-events-auto relative mx-auto max-w-md pt-4">
+          {/* The case handle, riveted in brass */}
+          <div aria-hidden className="pointer-events-none absolute top-0 left-1/2 z-10 h-6 w-24 -translate-x-1/2">
+            <div className="h-full rounded-t-full border-[5px] border-b-0 border-case" />
+            <div className="absolute bottom-0 -left-1 h-2 w-3.5 rounded-sm bg-brass" />
+            <div className="absolute -right-1 bottom-0 h-2 w-3.5 rounded-sm bg-brass" />
+          </div>
+
+          <div
+            ref={railRef}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerCancel}
+            onClickCapture={(e) => {
+              if (!suppressClick.current) return;
+              suppressClick.current = false;
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            className="relative touch-none rounded-[22px] bg-case p-1.5 shadow-[0_10px_30px_-8px_rgb(0_0_0/0.45)] select-none"
           >
-            <span
-              className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] leading-none font-semibold ${
-                profileActive ? "bg-accent text-accent-foreground" : "bg-muted text-background"
-              }`}
+            {/* Stitching */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-[4px] rounded-[18px] border border-dashed border-case-stitch"
+            />
+
+            {/* The divider card, with a folder tab on top */}
+            <div
+              aria-hidden
+              className="absolute top-1.5 bottom-1.5 left-1.5 w-[calc((100%-0.75rem)/3)] rounded-2xl bg-divider shadow-[0_2px_8px_rgb(0_0_0/0.25)]"
+              style={{
+                transform: `translateX(calc(${shown * 100}% + ${drag?.dx ?? 0}px))`,
+                transition: drag === null ? "transform 460ms cubic-bezier(0.34, 1.36, 0.5, 1)" : "none",
+              }}
             >
-              {initial}
-            </span>
-            Profile
-          </Link>
+              <div className="absolute -top-1 left-1/2 h-1.5 w-9 -translate-x-1/2 rounded-t-md bg-divider" />
+            </div>
+
+            <div className="relative grid grid-cols-3">
+              {MODES.map((mode, i) => (
+                <Link
+                  key={mode.id}
+                  href={i === current ? mode.root : hrefs[i]}
+                  prefetch={i === current ? null : true}
+                  draggable={false}
+                  aria-current={i === current ? "page" : undefined}
+                  onClick={(e) => {
+                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                    e.preventDefault();
+                    go(i);
+                  }}
+                  className={`flex flex-col items-center rounded-2xl py-2.5 transition-colors duration-300 ${
+                    i === highlighted ? "text-divider-foreground" : "text-case-text"
+                  }`}
+                >
+                  <span className="text-[15px] leading-tight font-semibold">{mode.label}</span>
+                  <span
+                    className={`mt-0.5 text-[10px] font-semibold tracking-[0.12em] uppercase transition-opacity duration-300 ${
+                      i === highlighted ? "opacity-70" : "opacity-60"
+                    }`}
+                  >
+                    {mode.caption}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
         </div>
       </nav>
     </>
