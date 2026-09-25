@@ -512,7 +512,7 @@ export function RosterScanner({ eventId, eventName }: { eventId: string; eventNa
         + Add a missed player
       </button>
 
-      <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-10 border-t border-border bg-background/90 px-4 py-3 backdrop-blur-xl sm:bottom-0">
+      <div className="fixed inset-x-0 bottom-[calc(6.5rem+env(safe-area-inset-bottom))] z-10 border-t border-border bg-background/90 px-4 py-3 backdrop-blur-xl">
         <div className="mx-auto max-w-3xl">
           {error && <p className="mb-2 text-sm text-red">{error}</p>}
           {!error && (existingCount > 0 || skipped > 0) && (

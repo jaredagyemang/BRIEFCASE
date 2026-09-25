@@ -40,11 +40,10 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       data-theme={theme === "system" ? undefined : theme}
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full font-sans">
+      <body className="flex h-dvh flex-col overflow-hidden font-sans">
         <AppNav />
-        <main className="mx-auto w-full max-w-3xl px-4 pt-4 pb-36 sm:pt-8">
-          {children}
-        </main>
+        {/* Each screen scrolls inside its own PageScroller, not the document. */}
+        <main className="relative min-h-0 flex-1">{children}</main>
       </body>
     </html>
   );

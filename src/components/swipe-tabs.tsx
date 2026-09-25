@@ -1,6 +1,6 @@
 "use client";
 
-import { Children, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { Children, useCallback, useId, useLayoutEffect, useRef, useState } from "react";
 
 type Tab = { id: string; label: string; count?: number };
 
@@ -24,6 +24,15 @@ export function SwipeTabs({
   const paneRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [active, setActive] = useState(() => Math.max(0, tabs.findIndex((t) => t.id === initialTab)));
   const [height, setHeight] = useState<number>();
+  // Height changes only animate once someone switches tabs. On arrival the
+  // height is set before the first paint, so a screen sliding in (switching
+  // modes) is already its final size and nothing moves mid-slide.
+  const [animateHeight, setAnimateHeight] = useState(false);
+  // Until measured, hidden panes are collapsed so the slider already has the
+  // visible pane's height from the very first frame, with no JavaScript. The
+  // measurement can land mid-slide (React defers effects while a view
+  // transition runs) but then changes nothing on screen.
+  const [measured, setMeasured] = useState(false);
 
   const scrollTo = useCallback((index: number, behavior: ScrollBehavior) => {
     const scroller = scrollerRef.current;
@@ -41,15 +50,21 @@ export function SwipeTabs({
     const scroller = scrollerRef.current;
     if (!scroller || !scroller.clientWidth) return;
     const index = Math.round(scroller.scrollLeft / scroller.clientWidth);
-    if (index !== active && index >= 0 && index < tabs.length) setActive(index);
+    if (index !== active && index >= 0 && index < tabs.length) {
+      setAnimateHeight(true);
+      setActive(index);
+    }
   }
 
   // Match the container's height to the active pane, including when its
-  // content changes size.
-  useEffect(() => {
+  // content changes size. A layout effect, so it's measured before paint.
+  useLayoutEffect(() => {
     const pane = paneRefs.current[active];
     if (!pane) return;
-    const update = () => setHeight(pane.offsetHeight);
+    const update = () => {
+      setHeight(pane.offsetHeight);
+      setMeasured(true);
+    };
     update();
     const observer = new ResizeObserver(update);
     observer.observe(pane);
@@ -70,6 +85,7 @@ export function SwipeTabs({
               aria-selected={selected}
               aria-controls={`${baseId}-pane-${tab.id}`}
               onClick={() => {
+                setAnimateHeight(true);
                 setActive(i);
                 scrollTo(i, "smooth");
               }}
@@ -90,7 +106,9 @@ export function SwipeTabs({
         ref={scrollerRef}
         onScroll={onScroll}
         style={{ height }}
-        className="-mx-4 mt-3 flex snap-x snap-mandatory items-start overflow-x-auto overflow-y-hidden transition-[height] duration-200 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className={`-mx-4 mt-3 flex snap-x snap-mandatory items-start overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
+          animateHeight ? "transition-[height] duration-200" : ""
+        }`}
       >
         {panes.map((pane, i) => (
           <div
@@ -102,7 +120,9 @@ export function SwipeTabs({
             id={`${baseId}-pane-${tabs[i]?.id}`}
             aria-labelledby={`${baseId}-tab-${tabs[i]?.id}`}
             aria-hidden={i !== active}
-            className="w-full min-w-full shrink-0 snap-start snap-always px-4"
+            className={`w-full min-w-full shrink-0 snap-start snap-always px-4 ${
+              !measured && i !== active ? "h-0 overflow-hidden" : ""
+            }`}
           >
             {pane}
           </div>
