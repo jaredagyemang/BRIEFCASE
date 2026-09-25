@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { DeleteEventButton } from "@/components/delete-event-button";
 import { SearchBox } from "@/components/search-box";
 import { SwipeTabs } from "@/components/swipe-tabs";
 import { describePlayer } from "@/lib/duplicates";
@@ -77,10 +78,10 @@ function EventList({ events, empty }: { events: EventWithCount[]; empty: string 
       {events.map((event) => {
         const players = event.event_players[0]?.count ?? 0;
         return (
-          <li key={event.id}>
+          <li key={event.id} className="flex items-stretch">
             <Link
               href={eventPath(event.id)}
-              className="flex items-center gap-3 px-4 py-4 transition-colors active:bg-surface-muted sm:hover:bg-surface-muted"
+              className="flex min-w-0 flex-1 items-center gap-3 py-4 pl-4 pr-2 transition-colors active:bg-surface-muted sm:hover:bg-surface-muted"
             >
               <div className="min-w-0 flex-1">
                 <p className="truncate font-semibold">{event.name}</p>
@@ -90,6 +91,7 @@ function EventList({ events, empty }: { events: EventWithCount[]; empty: string 
               </div>
               <span className="text-muted">›</span>
             </Link>
+            <DeleteEventButton eventId={event.id} eventName={event.name} />
           </li>
         );
       })}

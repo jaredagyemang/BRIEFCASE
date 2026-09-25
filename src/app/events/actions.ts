@@ -61,3 +61,49 @@ export async function setEventStatus(eventId: string, status: "active" | "closed
   if (error) throw new Error(error.message);
   revalidatePath("/events", "layout");
 }
+
+export type EventDeletionPreview = {
+  players: number;
+  // Seen only at this event, so deleting it removes them from Briefcase.
+  onlyHere: number;
+  entries: number;
+};
+
+// What deleting an event would remove, shown in the confirmation prompt.
+export async function previewEventDeletion(eventId: string): Promise<EventDeletionPreview> {
+  const supabase = await createAuthedClient();
+  const [{ data: appearances, error }, { count: entries }] = await Promise.all([
+    supabase
+      .from("event_players")
+      .select("player:players!inner(event_players(event_id))")
+      .eq("event_id", eventId)
+      .returns<{ player: { event_players: { event_id: string }[] } }[]>(),
+    supabase.from("evaluations").select("id", { count: "exact", head: true }).eq("event_id", eventId),
+  ]);
+  if (error) throw new Error(error.message);
+  return {
+    players: appearances.length,
+    onlyHere: appearances.filter((a) => a.player.event_players.every((ep) => ep.event_id === eventId)).length,
+    entries: entries ?? 0,
+  };
+}
+
+// Permanently deletes an event with its ratings, notes and jersey numbers.
+// Players also seen at other events stay; players only seen here are removed.
+export async function deleteEvent(
+  eventId: string,
+  goToEvents = false,
+): Promise<{ error: string } | undefined> {
+  const supabase = await createAuthedClient();
+  const { data: audioPaths, error } = await supabase.rpc("delete_event", { target_event_id: eventId });
+  if (error) return { error: "Couldn't delete the event. Try again." };
+
+  // The notes are gone either way; a leftover file is only wasted storage.
+  if (audioPaths?.length) {
+    const { error: removeError } = await supabase.storage.from("voice-notes").remove(audioPaths);
+    if (removeError) console.error("Couldn't remove voice note files for deleted event", eventId, removeError);
+  }
+
+  revalidatePath("/events", "layout");
+  if (goToEvents) redirect("/events");
+}
