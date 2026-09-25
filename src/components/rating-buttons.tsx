@@ -206,7 +206,7 @@ export function RatingButtons({
       {toast && (
         <div
           role="status"
-          className="fixed inset-x-0 bottom-24 z-40 flex justify-center px-4 sm:bottom-8"
+          className="fixed inset-x-0 bottom-[calc(6.5rem+env(safe-area-inset-bottom))] z-40 flex justify-center px-4"
         >
           <div className="flex items-center gap-4 rounded-full bg-foreground py-3 pr-3 pl-5 text-sm font-medium text-background shadow-lg">
             {toast.message}

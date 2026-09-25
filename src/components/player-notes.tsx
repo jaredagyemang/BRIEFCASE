@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import {
   deleteNote,
   saveTextNote,
@@ -29,6 +29,10 @@ const MAX_SECONDS = 5 * 60;
 // Recording formats in order of preference; Safari only supports mp4.
 const MIME_TYPES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
 
+const subscribeNoop = () => () => {};
+const browserCanRecord = () =>
+  typeof MediaRecorder !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia);
+
 function pickMimeType() {
   return MIME_TYPES.find((t) => MediaRecorder.isTypeSupported(t));
 }
@@ -45,7 +49,10 @@ export function PlayerNotes({ eventId, playerId, notes }: { eventId: string; pla
   const [error, setError] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
 
-  const [canRecord, setCanRecord] = useState(false);
+  // Recording needs MediaRecorder and a secure page (https or localhost).
+  // Read during render (after hydration), so when this screen slides in the
+  // Record button is already there rather than popping in mid-slide.
+  const canRecord = useSyncExternalStore(subscribeNoop, browserCanRecord, () => false);
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [pending, setPending] = useState<PendingRecording | null>(null);
@@ -62,11 +69,6 @@ export function PlayerNotes({ eventId, playerId, notes }: { eventId: string; pla
   const chunksRef = useRef<Blob[]>([]);
   const cancelledRef = useRef(false);
 
-  useEffect(() => {
-    // Recording needs MediaRecorder and a secure page (https or localhost).
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- browser-only check after hydration
-    setCanRecord(typeof MediaRecorder !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia));
-  }, []);
 
   // Warn before leaving while a recording could be lost.
   const unsaved = recording || uploading || pending !== null;

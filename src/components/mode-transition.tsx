@@ -1,4 +1,5 @@
 import { ViewTransition } from "react";
+import { PageScroller } from "@/components/page-scroller";
 import type { ModeId } from "@/lib/modes";
 
 // Wraps a mode's layout. Layouts stay mounted while moving around inside a
@@ -7,12 +8,13 @@ import type { ModeId } from "@/lib/modes";
 // transition. The slide itself is styled in globals.css by this fixed name
 // (mode-events, …) plus the direction the switcher puts on <html>, not by
 // view-transition classes: Safari doesn't reliably support those and falls
-// back to a crossfade that shows both screens at once.
+// back to a crossfade that shows both screens at once. The named element is
+// the mode's own scroll box, so every mode's snapshot is one screen tall.
 export function ModeTransition({ mode, children }: { mode: ModeId; children: React.ReactNode }) {
   const slide = { "mode-forward": "mode-forward", "mode-back": "mode-back", default: "none" };
   return (
     <ViewTransition name={`mode-${mode}`} enter={slide} exit={slide} default="none">
-      <div>{children}</div>
+      <PageScroller>{children}</PageScroller>
     </ViewTransition>
   );
 }

@@ -14,7 +14,12 @@ const storageKey = (index: number) => `briefcase:mode:${MODES[index].id}`;
 
 function remember(index: number) {
   try {
-    sessionStorage.setItem(storageKey(index), location.pathname + location.search);
+    // Not the "?tab=" of a player's slider: returning should land on its first
+    // tab, so nothing on the screen scrolls sideways as it slides in.
+    const params = new URLSearchParams(location.search);
+    params.delete("tab");
+    const search = params.size ? `?${params}` : "";
+    sessionStorage.setItem(storageKey(index), location.pathname + search);
   } catch {}
 }
 
@@ -60,7 +65,9 @@ export function AppNav() {
   useEffect(() => {
     if (arrivedFrom.current === current) return;
     arrivedFrom.current = current;
-    router.refresh();
+    // After the slide (420ms), so nothing on the incoming screen changes mid-slide.
+    const timer = setTimeout(() => router.refresh(), 600);
+    return () => clearTimeout(timer);
   }, [current, router]);
 
   // Move the divider as soon as it's tapped, before the new page arrives.
@@ -180,7 +187,7 @@ export function AppNav() {
     <>
       <header
         style={{ viewTransitionName: "site-header" }}
-        className="sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur-xl"
+        className="z-20 flex-none border-b border-border bg-background"
       >
         <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4">
           <Link href="/" className="text-lg font-semibold tracking-tight">
