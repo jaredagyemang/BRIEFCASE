@@ -1,5 +1,5 @@
-import { ModeTransition } from "@/components/mode-transition";
+import { PageScroller } from "@/components/page-scroller";
 
 export default function EventsLayout({ children }: LayoutProps<"/events">) {
-  return <ModeTransition mode="events">{children}</ModeTransition>;
+  return <PageScroller>{children}</PageScroller>;
 }

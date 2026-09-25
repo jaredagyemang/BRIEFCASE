@@ -1,5 +1,5 @@
-import { ModeTransition } from "@/components/mode-transition";
+import { PageScroller } from "@/components/page-scroller";
 
 export default function ProfileLayout({ children }: LayoutProps<"/profile">) {
-  return <ModeTransition mode="profile">{children}</ModeTransition>;
+  return <PageScroller>{children}</PageScroller>;
 }
