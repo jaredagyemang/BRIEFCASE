@@ -15,7 +15,7 @@ export function ContactActions({ phone, email }: { phone?: string | null; email?
         <a
           key={a.label}
           href={a.href}
-          className="flex w-20 flex-col items-center gap-1 rounded-2xl bg-surface py-3 text-xs font-medium text-accent"
+          className="flex w-20 flex-col items-center gap-1 rounded-2xl bg-surface py-3 text-xs font-medium text-accent-ink"
         >
           <span className="text-xl">{a.icon}</span>
           {a.label}

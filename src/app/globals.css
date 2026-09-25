@@ -23,18 +23,21 @@
   --foreground: light-dark(#111114, #f4f4f5);
   --muted: light-dark(#6b7280, #9ca3af);
   --border: light-dark(#e3e5ea, #2a2c31);
-  --accent: #0a84ff;
-  --accent-foreground: #ffffff;
+  /* Briefcase gold. Fills (buttons, badges) use --accent with dark brown text;
+     links and highlights use --accent-ink, deep enough to read on white. */
+  --accent: light-dark(#c9a24e, #d1a954);
+  --accent-foreground: #241910;
+  --accent-ink: light-dark(#8a6420, #d9b467);
   --green: light-dark(#22c55e, #30d158);
   --yellow: light-dark(#eab308, #ffd60a);
   --red: light-dark(#ef4444, #ff453a);
   /* The mode switcher: a leather case with a cream divider card. */
   --case: light-dark(#3a2a1f, #30231a);
   --case-stitch: light-dark(rgb(240 220 190 / 0.38), rgb(240 220 190 / 0.2));
-  --case-text: light-dark(#d9c4a7, #a8917a);
+  --case-text: light-dark(#f6eee2, #eee3d2);
   --divider: light-dark(#f8f0e3, #eee2cd);
   --divider-foreground: #3a2a1f;
-  --brass: light-dark(#c59a4e, #b38a43);
+  --divider-accent: #8a6420;
 }
 
 :root[data-theme="light"] {
@@ -54,6 +57,7 @@
   --color-border: var(--border);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-accent-ink: var(--accent-ink);
   --color-green: var(--green);
   --color-yellow: var(--yellow);
   --color-red: var(--red);
@@ -62,7 +66,7 @@
   --color-case-text: var(--case-text);
   --color-divider: var(--divider);
   --color-divider-foreground: var(--divider-foreground);
-  --color-brass: var(--brass);
+  --color-divider-accent: var(--divider-accent);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -80,13 +84,26 @@ body {
 }
 
 /* ---------------------------------------------------------------------------
-   Switching modes (Profile · Events · The Docket): the content slides out
-   and settles back a little, like a divider flipped to the next compartment.
-   The switcher itself stays put so its divider card can slide live.
+   Switching modes (Profile · Events · The Docket): like a carousel, the old
+   screen slides fully off one side as the new one slides in from the other,
+   side by side and fully opaque, so the two never overlap. The header and
+   switcher stay put so the divider card can slide live.
    --------------------------------------------------------------------------- */
+
+:root {
+  --mode-slide: 420ms cubic-bezier(0.32, 0.72, 0, 1);
+}
 
 ::view-transition {
   pointer-events: none;
+}
+
+/* The page background behind the sliding screens swaps instantly. */
+::view-transition-old(root) {
+  display: none;
+}
+::view-transition-new(root) {
+  animation: none;
 }
 
 ::view-transition-group(mode-switcher),
@@ -104,34 +121,30 @@ body {
 }
 
 ::view-transition-old(.mode-forward) {
-  --mode-shift: -48px;
-  animation: 170ms cubic-bezier(0.4, 0, 1, 1) both mode-out;
+  --mode-to: -100vw;
+  animation: var(--mode-slide) both mode-slide-out;
 }
 ::view-transition-new(.mode-forward) {
-  --mode-shift: 48px;
-  animation: 340ms cubic-bezier(0.2, 0.8, 0.2, 1) 110ms both mode-in;
+  --mode-from: 100vw;
+  animation: var(--mode-slide) both mode-slide-in;
 }
 ::view-transition-old(.mode-back) {
-  --mode-shift: 48px;
-  animation: 170ms cubic-bezier(0.4, 0, 1, 1) both mode-out;
+  --mode-to: 100vw;
+  animation: var(--mode-slide) both mode-slide-out;
 }
 ::view-transition-new(.mode-back) {
-  --mode-shift: -48px;
-  animation: 340ms cubic-bezier(0.2, 0.8, 0.2, 1) 110ms both mode-in;
+  --mode-from: -100vw;
+  animation: var(--mode-slide) both mode-slide-in;
 }
 
-@keyframes mode-out {
+@keyframes mode-slide-out {
   to {
-    opacity: 0;
-    translate: var(--mode-shift);
-    scale: 0.97;
+    translate: var(--mode-to) 0;
   }
 }
-@keyframes mode-in {
+@keyframes mode-slide-in {
   from {
-    opacity: 0;
-    translate: var(--mode-shift);
-    scale: 0.97;
+    translate: var(--mode-from) 0;
   }
 }
 

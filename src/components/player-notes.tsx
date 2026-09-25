@@ -409,7 +409,7 @@ export function PlayerNotes({ eventId, playerId, notes }: { eventId: string; pla
                     <button
                       type="button"
                       onClick={() => startEditing(note)}
-                      className="-my-1 rounded-full px-2 py-1 font-semibold text-accent"
+                      className="-my-1 rounded-full px-2 py-1 font-semibold text-accent-ink"
                     >
                       Edit
                     </button>
