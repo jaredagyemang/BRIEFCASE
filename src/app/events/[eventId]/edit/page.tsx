@@ -1,3 +1,4 @@
+import { DeleteEventButton } from "@/components/delete-event-button";
 import { EventForm } from "@/components/event-form";
 import { eventPath } from "@/lib/events";
 import { getEvent } from "@/lib/events-server";
@@ -16,6 +17,9 @@ export default async function EditEventPage({ params }: PageProps<"/events/[even
         submitLabel="Save"
         cancelHref={eventPath(event.id)}
       />
+      <div className="mt-10 border-t border-border pt-6">
+        <DeleteEventButton eventId={event.id} eventName={event.name} variant="full" />
+      </div>
     </div>
   );
 }
