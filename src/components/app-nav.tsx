@@ -81,7 +81,10 @@ export function AppNav() {
     remember(current);
     setPending({ index: target, from: pathname });
     if ("vibrate" in navigator) navigator.vibrate(8);
-    router.push(destination(target), { transitionTypes: [target > current ? "mode-forward" : "mode-back"] });
+    const direction = target > current ? "forward" : "back";
+    // The slide's CSS reads the direction from <html> (see globals.css).
+    document.documentElement.dataset.modeDir = direction;
+    router.push(destination(target), { transitionTypes: [`mode-${direction}`] });
   }
 
   const onPageSwipe = useEffectEvent((direction: 1 | -1) => {

@@ -90,9 +90,6 @@ body {
    switcher stay put so the divider card can slide live.
    --------------------------------------------------------------------------- */
 
-:root {
-  --mode-slide: 420ms cubic-bezier(0.32, 0.72, 0, 1);
-}
 
 ::view-transition {
   pointer-events: none;
@@ -120,32 +117,46 @@ body {
   animation: none;
 }
 
-::view-transition-old(.mode-forward) {
-  --mode-to: -100vw;
-  animation: var(--mode-slide) both mode-slide-out;
+/* Each mode's screen has a fixed transition name; <html data-mode-dir> says
+   which way to slide. The leaving screen only has an "old" image and the
+   arriving one only a "new" image, so each gets exactly one slide and no
+   browser-default fade. */
+:root[data-mode-dir="forward"]::view-transition-old(mode-profile),
+:root[data-mode-dir="forward"]::view-transition-old(mode-events),
+:root[data-mode-dir="forward"]::view-transition-old(mode-docket) {
+  animation: 420ms cubic-bezier(0.32, 0.72, 0, 1) both mode-out-left;
 }
-::view-transition-new(.mode-forward) {
-  --mode-from: 100vw;
-  animation: var(--mode-slide) both mode-slide-in;
+:root[data-mode-dir="forward"]::view-transition-new(mode-profile),
+:root[data-mode-dir="forward"]::view-transition-new(mode-events),
+:root[data-mode-dir="forward"]::view-transition-new(mode-docket) {
+  animation: 420ms cubic-bezier(0.32, 0.72, 0, 1) both mode-in-from-right;
 }
-::view-transition-old(.mode-back) {
-  --mode-to: 100vw;
-  animation: var(--mode-slide) both mode-slide-out;
+:root[data-mode-dir="back"]::view-transition-old(mode-profile),
+:root[data-mode-dir="back"]::view-transition-old(mode-events),
+:root[data-mode-dir="back"]::view-transition-old(mode-docket) {
+  animation: 420ms cubic-bezier(0.32, 0.72, 0, 1) both mode-out-right;
 }
-::view-transition-new(.mode-back) {
-  --mode-from: -100vw;
-  animation: var(--mode-slide) both mode-slide-in;
+:root[data-mode-dir="back"]::view-transition-new(mode-profile),
+:root[data-mode-dir="back"]::view-transition-new(mode-events),
+:root[data-mode-dir="back"]::view-transition-new(mode-docket) {
+  animation: 420ms cubic-bezier(0.32, 0.72, 0, 1) both mode-in-from-left;
 }
 
-@keyframes mode-slide-out {
-  to {
-    translate: var(--mode-to) 0;
-  }
+@keyframes mode-out-left {
+  from { transform: translateX(0); }
+  to { transform: translateX(-100vw); }
 }
-@keyframes mode-slide-in {
-  from {
-    translate: var(--mode-from) 0;
-  }
+@keyframes mode-in-from-right {
+  from { transform: translateX(100vw); }
+  to { transform: translateX(0); }
+}
+@keyframes mode-out-right {
+  from { transform: translateX(0); }
+  to { transform: translateX(100vw); }
+}
+@keyframes mode-in-from-left {
+  from { transform: translateX(-100vw); }
+  to { transform: translateX(0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
