@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import type { DuplicateMatch } from "@/lib/duplicates";
+import { isEmail } from "@/lib/form";
+import { normalizeGpa, readRosterGpa } from "@/lib/gpa";
 import { findMatchesForMany } from "@/lib/duplicates-server";
 import { RosterScanError, scanRosterImage } from "@/lib/roster-scan";
 import { createAuthedClient } from "@/lib/supabase/server";
@@ -13,7 +15,13 @@ export type RosterRow = {
   last_name: string;
   position: string;
   grad_year: string;
+  gpa: string;
+  email: string;
+  club_team: string;
   unclear: boolean;
+  // Set when the roster's GPA couldn't be read as a 4.0-scale value or a
+  // percentage. Cleared once the GPA is edited.
+  gpa_note: string | null;
 };
 
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
@@ -52,14 +60,21 @@ export async function scanRoster(formData: FormData): Promise<
     return { ok: false, error: error instanceof RosterScanError ? error.message : "Scanning failed. Try again." };
   }
 
-  const rows: RosterRow[] = roster.players.slice(0, MAX_ROWS).map((p) => ({
-    jersey_number: p.jersey_number ?? "",
-    first_name: p.first_name.trim(),
-    last_name: p.last_name.trim(),
-    position: p.position ?? "",
-    grad_year: p.grad_year && p.grad_year >= 2000 && p.grad_year <= 2100 ? String(p.grad_year) : "",
-    unclear: p.unclear,
-  }));
+  const rows: RosterRow[] = roster.players.slice(0, MAX_ROWS).map((p) => {
+    const gpa = readRosterGpa(p.gpa_as_written);
+    return {
+      jersey_number: p.jersey_number ?? "",
+      first_name: p.first_name.trim(),
+      last_name: p.last_name.trim(),
+      position: p.position ?? "",
+      grad_year: p.grad_year && p.grad_year >= 2000 && p.grad_year <= 2100 ? String(p.grad_year) : "",
+      gpa: gpa.gpa,
+      gpa_note: gpa.note,
+      email: (p.email ?? "").trim().replace(/\s+/g, "").toLowerCase(),
+      club_team: (p.club_team ?? roster.team_name ?? "").trim(),
+      unclear: p.unclear,
+    };
+  });
   if (rows.length === 0) {
     return {
       ok: false,
@@ -86,13 +101,12 @@ type SaveRow = RosterRow & {
 
 // Step 2: save the rows the person kept. Nothing is saved unless every row is
 // valid and every possible duplicate has been confirmed.
-export async function saveRosterPlayers(input: { clubTeam: string; rows: SaveRow[] }): Promise<
+export async function saveRosterPlayers(input: { rows: SaveRow[] }): Promise<
   | { ok: true; added: number }
   | { ok: false; error: string; rowErrors?: Record<number, string>; matches?: DuplicateMatch[][] }
 > {
   const rows = input.rows.slice(0, MAX_ROWS);
   if (rows.length === 0) return { ok: false, error: "There are no players to add." };
-  const clubTeam = input.clubTeam.trim().slice(0, 100) || null;
 
   const rowErrors: Record<number, string> = {};
   const records = rows.map((row, i) => {
@@ -100,17 +114,24 @@ export async function saveRosterPlayers(input: { clubTeam: string; rows: SaveRow
     const last_name = row.last_name.trim();
     const jersey_number = row.jersey_number.trim().replace(/^#/, "") || null;
     const grad_year = parseYear(row.grad_year);
+    const gpaResult = normalizeGpa(row.gpa);
+    const gpa = gpaResult.ok ? gpaResult.value : null;
+    const email = row.email.trim() || null;
     if (!first_name || !last_name) rowErrors[i] = "Add a first and last name";
     else if (row.grad_year.trim() && !(grad_year && grad_year >= 2000 && grad_year <= 2100))
       rowErrors[i] = "Grad year should be a 4-digit year";
+    else if (!gpaResult.ok) rowErrors[i] = gpaResult.error;
+    else if (email && !isEmail(email)) rowErrors[i] = "Enter a valid email";
     else if (jersey_number && jersey_number.length > 10) rowErrors[i] = "Jersey number is too long";
     return {
       first_name,
       last_name,
       jersey_number,
       grad_year,
+      gpa,
+      email,
       position: row.position.trim().slice(0, 50) || null,
-      club_team: clubTeam,
+      club_team: row.club_team.trim().slice(0, 100) || null,
     };
   });
   if (Object.keys(rowErrors).length > 0) {

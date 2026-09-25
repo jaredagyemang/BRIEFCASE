@@ -24,7 +24,8 @@ export type Player = {
   grad_year: number | null;
   position: string | null;
   club_team: string | null;
-  gpa: number | null;
+  // As given: a 4.0-scale value ("3.6") or a percentage ("85%"), or a range.
+  gpa: string | null;
   phone: string | null;
   email: string | null;
   traffic_light: TrafficLight | null;

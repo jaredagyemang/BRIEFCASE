@@ -86,7 +86,7 @@ export default async function PlayerPage({ params }: PageProps<"/players/[id]">)
     { label: "Grad year", value: player.grad_year },
     { label: "Position", value: player.position },
     { label: "Club team", value: player.club_team },
-    { label: "GPA", value: player.gpa?.toFixed(2) },
+    { label: "GPA", value: player.gpa },
     { label: "Phone", value: player.phone },
     { label: "Email", value: player.email },
   ];

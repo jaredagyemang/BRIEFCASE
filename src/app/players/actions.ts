@@ -6,6 +6,7 @@ import { createAuthedClient } from "@/lib/supabase/server";
 import { duplicateKey, type DuplicateMatch } from "@/lib/duplicates";
 import { findMatchingPlayers } from "@/lib/duplicates-server";
 import { invalid, isEmail, submittedValues, text, type FormState } from "@/lib/form";
+import { normalizeGpa } from "@/lib/gpa";
 import {
   isLifecycleStatus,
   isTrafficLight,
@@ -54,11 +55,9 @@ function parsePlayer(formData: FormData) {
     fieldErrors.grad_year = "Enter a 4-digit year";
   }
 
-  const gpaRaw = text(formData, "gpa");
-  const gpa = gpaRaw ? Number(gpaRaw) : null;
-  if (gpa !== null && !(gpa >= 0 && gpa <= 5)) {
-    fieldErrors.gpa = "GPA must be between 0 and 5";
-  }
+  const gpaResult = normalizeGpa(text(formData, "gpa"));
+  if (!gpaResult.ok) fieldErrors.gpa = gpaResult.error;
+  const gpa = gpaResult.ok ? gpaResult.value : null;
 
   const jersey_number = text(formData, "jersey_number")?.replace(/^#/, "") ?? null;
   if (jersey_number && jersey_number.length > 10) {
