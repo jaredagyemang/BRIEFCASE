@@ -1,7 +1,7 @@
 -- Events: organize players, ratings, and notes by the showcase where they
 -- were seen. A player can be seen at many events; each event keeps its own
 -- rating and notes for them. Existing data moves into a closed
--- "Before Events" event, so nothing is lost.
+-- "Testing Event" event, so nothing is lost.
 -- Run once in Supabase → SQL Editor, after the earlier migrations.
 -- All-or-nothing: if any step fails, nothing changes.
 
@@ -62,7 +62,7 @@ alter table public.players
   add column status_event_id uuid references public.events (id) on delete set null;
 
 -- ---------------------------------------------------------------------------
--- Move existing data into a closed "Before Events" event
+-- Move existing data into a closed "Testing Event" event
 -- ---------------------------------------------------------------------------
 
 do $$
@@ -72,7 +72,7 @@ begin
   if exists (select 1 from public.players) then
     insert into public.events (name, event_date, status, closed_at, created_by)
     values (
-      'Before Events',
+      'Testing Event',
       (select min(created_at)::date from public.players),
       'closed',
       now(),
