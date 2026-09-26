@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { photoPathFor, storeAndRead, type Supabase } from "@/app/events/note-scan-server";
+import { photoPathFor, removeUnusedPhotos, storeAndRead } from "@/app/events/note-scan-server";
 import { readSingleNotePhoto } from "@/lib/note-scan";
 import { createAuthedClient } from "@/lib/supabase/server";
 
@@ -15,7 +15,6 @@ export type { MatchStatus, PageNote } from "@/lib/note-scan";
 
 type Result<T> = ({ ok: true } & T) | { ok: false; error: string };
 
-const BUCKET = "note-photos";
 const NOTE_MAX = 5000;
 const MAX_NOTES = 300;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -49,17 +48,25 @@ export async function readSingleNote(
 
 // ---- Saving
 
-export type NoteToSave = { playerId: string; text: string; photoPath: string };
+// A note from the review screen: saved to its player, or (wait) kept with
+// the event until its player is added.
+export type NoteToSave = {
+  playerId: string | null;
+  wait?: boolean;
+  text: string;
+  photoPath: string;
+  writtenAs?: string | null;
+};
 
 // Saves typed-up notes to their players at this event, each linked to the
-// photo it came from. `unusedPhotos` are photos from this scan whose notes
-// were all removed; they're deleted. Nothing is saved unless every note is
-// valid.
+// photo it came from; notes marked `wait` go on the event's "waiting for a
+// player" list. `unusedPhotos` are photos from this scan whose notes were
+// all removed; they're deleted. Nothing is saved unless every note is valid.
 export async function saveScannedNotes(
   eventId: string,
   notes: NoteToSave[],
   unusedPhotos: string[] = [],
-): Promise<Result<{ saved: number }> & { rowErrors?: Record<number, string> }> {
+): Promise<Result<{ saved: number; waiting: number }> & { rowErrors?: Record<number, string> }> {
   if (!UUID.test(eventId)) return { ok: false, error: "Couldn't find that event." };
   if (notes.length === 0) return { ok: false, error: "There are no notes to save." };
   if (notes.length > MAX_NOTES) return { ok: false, error: `Save at most ${MAX_NOTES} notes at a time.` };
@@ -74,41 +81,51 @@ export async function saveScannedNotes(
   const validPhoto = photoPathFor(eventId);
 
   const rowErrors: Record<number, string> = {};
-  const rows = notes.map((n, i) => {
+  notes.forEach((n, i) => {
     const text = typeof n.text === "string" ? n.text.trim() : "";
-    if (!n.playerId || !atEvent.has(n.playerId)) rowErrors[i] = "Pick a player from this event";
+    if (!n.wait && (!n.playerId || !atEvent.has(n.playerId))) rowErrors[i] = "Pick a player from this event";
     else if (!text) rowErrors[i] = "This note is empty. Remove it instead.";
     else if (text.length > NOTE_MAX) rowErrors[i] = `Keep notes under ${NOTE_MAX.toLocaleString()} characters`;
     else if (!validPhoto.test(n.photoPath)) rowErrors[i] = "This note's photo is missing. Scan the page again.";
-    return { event_id: eventId, player_id: n.playerId, transcript_text: text, note_image_url: n.photoPath };
   });
   if (Object.keys(rowErrors).length) return { ok: false, error: "Fix the highlighted notes first.", rowErrors };
 
-  const { error } = await supabase.from("evaluations").insert(rows);
-  if (error) return { ok: false, error: "Couldn't save the notes. Check your connection and try again." };
+  const assigned = notes
+    .filter((n) => !n.wait)
+    .map((n) => ({ event_id: eventId, player_id: n.playerId, transcript_text: n.text.trim(), note_image_url: n.photoPath }));
+  const waiting = notes
+    .filter((n) => n.wait)
+    .map((n) => ({
+      event_id: eventId,
+      note_text: n.text.trim(),
+      note_image_url: n.photoPath,
+      written_as: typeof n.writtenAs === "string" ? n.writtenAs.slice(0, 200) || null : null,
+    }));
+
+  let savedIds: string[] = [];
+  if (assigned.length) {
+    const { data, error } = await supabase.from("evaluations").insert(assigned).select("id");
+    if (error) return { ok: false, error: "Couldn't save the notes. Check your connection and try again." };
+    savedIds = (data ?? []).map((r) => r.id);
+  }
+  if (waiting.length) {
+    const { error } = await supabase.from("waiting_notes").insert(waiting);
+    if (error) {
+      // All or nothing: take back the notes just saved.
+      if (savedIds.length) await supabase.from("evaluations").delete().in("id", savedIds);
+      return { ok: false, error: "Couldn't save the notes. Check your connection and try again." };
+    }
+  }
 
   await removeUnusedPhotos(supabase, eventId, unusedPhotos);
   revalidatePath("/events", "layout");
-  return { ok: true, saved: rows.length };
+  return { ok: true, saved: assigned.length, waiting: waiting.length };
 }
 
 // Removes photos from a scan that was abandoned, or whose notes were all
-// removed. Photos a saved note still uses are kept.
+// removed. Photos a saved or waiting note still uses are kept.
 export async function discardNotePhotos(eventId: string, photoPaths: string[]): Promise<void> {
   if (!UUID.test(eventId)) return;
   const supabase = await createAuthedClient();
   await removeUnusedPhotos(supabase, eventId, photoPaths);
-}
-
-async function removeUnusedPhotos(supabase: Supabase, eventId: string, photoPaths: string[]) {
-  const validPhoto = photoPathFor(eventId);
-  const candidates = [...new Set(photoPaths)].filter((p) => typeof p === "string" && validPhoto.test(p)).slice(0, 100);
-  if (!candidates.length) return;
-  const { data: used } = await supabase.from("evaluations").select("note_image_url").in("note_image_url", candidates);
-  const inUse = new Set((used ?? []).map((u) => u.note_image_url));
-  const unused = candidates.filter((p) => !inUse.has(p));
-  if (!unused.length) return;
-  // A leftover photo is only wasted storage, so a failure here isn't shown.
-  const { error } = await supabase.storage.from(BUCKET).remove(unused);
-  if (error) console.error("Couldn't remove unused note photos", error);
 }

@@ -31,7 +31,7 @@ const PLAYER_COLUMNS: Column[] = [
 const playerCells = (p: ExportPlayer | null, eventName: string, note: string): Cell[] =>
   p
     ? [p.name, p.jersey, p.position, p.grad_year, p.club, p.email, p.gpa, eventName, note]
-    : ["(Unassigned)", null, null, null, null, null, null, eventName, note];
+    : ["(No player yet)", null, null, null, null, null, null, eventName, note];
 
 export function scanBatchXlsx(
   eventName: string,
@@ -46,7 +46,7 @@ export function scanBatchXlsx(
 
 export function eventNotesXlsx(
   eventName: string,
-  notes: { player: ExportPlayer; text: string; type: string; by: string; date: string }[],
+  notes: { player: ExportPlayer | null; text: string; type: string; by: string; date: string }[],
 ) {
   return buildXlsx(
     "Notes",

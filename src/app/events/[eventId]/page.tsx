@@ -30,7 +30,7 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
   const event = await getEvent(eventId);
   const supabase = await createClient();
 
-  const [{ data, error }, { data: allPlayers }] = await Promise.all([
+  const [{ data, error }, { data: allPlayers }, { count: waitingNotes }] = await Promise.all([
     supabase
       .from("event_players")
       .select("jersey_number, traffic_light, player:players!inner(id, first_name, last_name, grad_year, position, club_team, lifecycle_status)")
@@ -41,6 +41,8 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
       .from("players")
       .select("id, first_name, last_name, grad_year")
       .returns<Pick<Player, "id" | "first_name" | "last_name" | "grad_year">[]>(),
+    // Handwritten notes still waiting for their player to be added.
+    supabase.from("waiting_notes").select("id", { count: "exact", head: true }).eq("event_id", eventId),
   ]);
   const duplicates = duplicateIds(allPlayers ?? []);
   const everyone = data ?? [];
@@ -131,6 +133,18 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
           + Add player
         </Link>
       </div>
+
+      {(waitingNotes ?? 0) > 0 && (
+        <Link
+          href={`${eventPath(eventId)}/waiting-notes`}
+          className="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-yellow/10 px-4 py-3 text-sm font-medium"
+        >
+          <span>
+            ⏳ {waitingNotes} note{waitingNotes === 1 ? "" : "s"} waiting for a player
+          </span>
+          <span className="text-muted">›</span>
+        </Link>
+      )}
 
       {added > 0 && (
         <p className="mt-4 rounded-2xl bg-green/15 px-4 py-3 text-sm font-medium" role="status">

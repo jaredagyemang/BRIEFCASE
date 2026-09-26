@@ -90,3 +90,20 @@ export async function readNotesPage(
   return { ok: true, photoPath: result.photoPath, notes: result.value };
 }
 
+
+// Deletes photos of this event's scans that no note (saved or waiting) uses.
+export async function removeUnusedPhotos(supabase: Supabase, eventId: string, photoPaths: string[]) {
+  const validPhoto = photoPathFor(eventId);
+  const candidates = [...new Set(photoPaths)].filter((p) => typeof p === "string" && validPhoto.test(p)).slice(0, 100);
+  if (!candidates.length) return;
+  const [{ data: saved }, { data: waiting }] = await Promise.all([
+    supabase.from("evaluations").select("note_image_url").in("note_image_url", candidates),
+    supabase.from("waiting_notes").select("note_image_url").in("note_image_url", candidates),
+  ]);
+  const inUse = new Set([...(saved ?? []), ...(waiting ?? [])].map((u) => u.note_image_url));
+  const unused = candidates.filter((p) => !inUse.has(p));
+  if (!unused.length) return;
+  // A leftover photo is only wasted storage, so a failure here isn't shown.
+  const { error } = await supabase.storage.from(BUCKET).remove(unused);
+  if (error) console.error("Couldn't remove unused note photos", error);
+}

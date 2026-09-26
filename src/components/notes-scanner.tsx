@@ -8,6 +8,7 @@ import {
   type MatchStatus,
   type PageNote,
 } from "@/app/events/note-scan-actions";
+import { NewPlayerSheet } from "@/components/new-player-sheet";
 import { PhotoThumb } from "@/components/photo-viewer";
 import { eventPath } from "@/lib/events";
 import { exportFileName, scanBatchXlsx, XLSX_TYPE, type ExportPlayer } from "@/lib/note-export";
@@ -37,7 +38,11 @@ type Note = {
   aiPlayerId: string | null;
   status: MatchStatus;
   writtenAs: string | null;
+  writtenName: string | null;
+  writtenJersey: string | null;
   hardToRead: boolean;
+  // Kept on the event's "waiting for a player" list instead of assigned.
+  wait: boolean;
   error?: string;
 };
 
@@ -54,7 +59,7 @@ const cellClass =
 export function NotesScanner({
   eventId,
   eventName,
-  players,
+  players: initialPlayers,
 }: {
   eventId: string;
   eventName: string;
@@ -64,7 +69,11 @@ export function NotesScanner({
   const [pages, setPages] = useState<Page[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState<{ notes: number; players: number } | null>(null);
+  const [saved, setSaved] = useState<{ notes: number; players: number; waiting: number } | null>(null);
+  // The event's players, plus any added from a note on this screen.
+  const [players, setPlayers] = useState(initialPlayers);
+  // The note whose "Add as new player" sheet is open.
+  const [adding, setAdding] = useState<Note | null>(null);
   const [saving, startSaving] = useTransition();
   const cameraRef = useRef<HTMLInputElement>(null);
   const libraryRef = useRef<HTMLInputElement>(null);
@@ -146,7 +155,7 @@ export function NotesScanner({
           ),
         );
         if (!outcome.ok) continue;
-        const found = outcome.notes.map((n) => ({ id: nextId++, pageId, ...n, aiPlayerId: n.playerId }));
+        const found = outcome.notes.map((n) => ({ id: nextId++, pageId, ...n, aiPlayerId: n.playerId, wait: false }));
         setNotes((current) => [...current, ...found]);
       }
     } finally {
@@ -169,12 +178,14 @@ export function NotesScanner({
   }
 
   const busy = pages.some((p) => p.status === "queued" || p.status === "reading");
-  const unassigned = notes.filter((n) => !n.playerId).length;
+  const waiting = notes.filter((n) => n.wait).length;
+  const unassigned = notes.filter((n) => !n.playerId && !n.wait).length;
   const toCheck = notes.filter((n) => n.playerId && n.status === "check" && n.playerId === n.aiPlayerId).length;
-  const matched = notes.length - unassigned - toCheck;
+  const matched = notes.length - unassigned - toCheck - waiting;
   const done = pages.filter((p) => p.status === "done" || p.status === "error").length;
 
   function matchLabel(n: Note) {
+    if (n.wait) return "Waiting for a player";
     if (!n.playerId) return "Unassigned";
     if (n.playerId !== n.aiPlayerId) return "Assigned by coach";
     if (n.status === "matched") return "Matched by AI";
@@ -207,14 +218,24 @@ export function NotesScanner({
       try {
         result = await saveScannedNotes(
           eventId,
-          list.map((n) => ({ playerId: n.playerId ?? "", text: n.text, photoPath: photoOf.get(n.pageId) ?? "" })),
+          list.map((n) => ({
+            playerId: n.wait ? null : n.playerId,
+            wait: n.wait,
+            text: n.text,
+            photoPath: photoOf.get(n.pageId) ?? "",
+            writtenAs: n.writtenAs,
+          })),
           unusedPhotos,
         );
       } catch {
         result = { ok: false, error: "Couldn't reach the server. Your notes are still here; try again." };
       }
       if (result.ok) {
-        setSaved({ notes: result.saved, players: new Set(list.map((n) => n.playerId)).size });
+        setSaved({
+          notes: result.saved,
+          players: new Set(list.flatMap((n) => (n.wait || !n.playerId ? [] : [n.playerId]))).size,
+          waiting: result.waiting,
+        });
         setStage("saved");
         return;
       }
@@ -271,13 +292,26 @@ export function NotesScanner({
         <Header eventId={eventId} eventName={eventName} />
         <div className="mt-6 rounded-3xl bg-surface p-6 text-center">
           <p className="text-5xl">✅</p>
-          <p className="mt-3 text-lg font-semibold">
-            Saved {saved.notes} note{saved.notes === 1 ? "" : "s"} for {saved.players} player
-            {saved.players === 1 ? "" : "s"}
-          </p>
-          <p className="mt-1 text-sm text-muted">
-            Each note is on its player&apos;s page at this event, with the photo of your handwriting.
-          </p>
+          {saved.notes > 0 && (
+            <>
+              <p className="mt-3 text-lg font-semibold">
+                Saved {saved.notes} note{saved.notes === 1 ? "" : "s"} for {saved.players} player
+                {saved.players === 1 ? "" : "s"}
+              </p>
+              <p className="mt-1 text-sm text-muted">
+                Each note is on its player&apos;s page at this event, with the photo of your handwriting.
+              </p>
+            </>
+          )}
+          {saved.waiting > 0 && (
+            <Link
+              href={`${eventPath(eventId)}/waiting-notes`}
+              className="mt-4 block rounded-2xl bg-yellow/10 px-4 py-3 text-sm font-medium"
+            >
+              ⏳ {saved.waiting} note{saved.waiting === 1 ? " is" : "s are"} waiting for a player. Assign{" "}
+              {saved.waiting === 1 ? "it" : "them"} once they&apos;re added ›
+            </Link>
+          )}
           <button
             type="button"
             onClick={exportExcel}
@@ -398,6 +432,7 @@ export function NotesScanner({
             matched > 0 && `${matched} matched`,
             toCheck > 0 && `${toCheck} to check`,
             unassigned > 0 && `${unassigned} unassigned`,
+            waiting > 0 && `${waiting} waiting for a player`,
           ]
             .filter(Boolean)
             .join(" · ") || (busy ? "Notes appear here as each page is read." : "No notes found.")}
@@ -473,23 +508,35 @@ export function NotesScanner({
               {pageNotes.map((n, i) => {
                 const label = `Page ${pageIndex + 1} note ${i + 1}`;
                 const changed = n.playerId !== n.aiPlayerId;
-                const flag = !n.playerId ? "unassigned" : !changed && n.status === "check" ? "check" : "ok";
+                const flag = n.wait
+                  ? "waiting"
+                  : !n.playerId
+                    ? "unassigned"
+                    : !changed && n.status === "check"
+                      ? "check"
+                      : "ok";
                 return (
                   <li
                     key={n.id}
                     aria-label={label}
                     className={`rounded-2xl bg-surface p-3 ${
-                      n.error ? "ring-2 ring-red" : flag === "unassigned" ? "ring-2 ring-red/50" : flag === "check" ? "ring-2 ring-yellow/60" : ""
+                      n.error
+                        ? "ring-2 ring-red"
+                        : flag === "unassigned"
+                          ? "ring-2 ring-red/50"
+                          : flag === "check"
+                            ? "ring-2 ring-yellow/60"
+                            : ""
                     }`}
                   >
                     <div className="flex items-center gap-2">
                       <select
-                        value={n.playerId ?? ""}
-                        onChange={(e) => updateNote(n.id, { playerId: e.target.value || null })}
+                        value={n.wait ? "" : (n.playerId ?? "")}
+                        onChange={(e) => updateNote(n.id, { playerId: e.target.value || null, wait: false })}
                         aria-label={`${label} player`}
-                        className={`${cellClass} flex-1 ${n.playerId ? "font-semibold" : "text-muted"}`}
+                        className={`${cellClass} flex-1 ${n.playerId && !n.wait ? "font-semibold" : "text-muted"}`}
                       >
-                        <option value="">Unassigned — pick a player</option>
+                        <option value="">{n.wait ? "Waiting for a player" : "Unassigned — pick a player"}</option>
                         {players.map((p) => (
                           <option key={p.id} value={p.id}>
                             {playerLabel(p, players)}
@@ -507,18 +554,54 @@ export function NotesScanner({
                     </div>
                     <p
                       className={`mt-1.5 px-1 text-sm ${
-                        flag === "ok" ? "text-muted" : flag === "check" ? "text-yellow-700 dark:text-yellow" : "text-red"
+                        flag === "ok" || flag === "waiting"
+                          ? "text-muted"
+                          : flag === "check"
+                            ? "text-yellow-700 dark:text-yellow"
+                            : "text-red"
                       }`}
                     >
-                      {flag === "unassigned"
-                        ? "Not matched. Pick a player, or remove this note."
-                        : flag === "check"
-                          ? "Check this match."
-                          : changed
-                            ? "Assigned by you."
-                            : "✓ Matched."}
+                      {flag === "waiting"
+                        ? "⏳ Will wait on this event’s list until the player is added."
+                        : flag === "unassigned"
+                          ? "Not matched. Pick a player, add them, or hold the note for later."
+                          : flag === "check"
+                            ? "Check this match."
+                            : changed
+                              ? "Assigned by you."
+                              : "✓ Matched."}
                       {n.writtenAs && <span className="text-muted"> Written as “{n.writtenAs}”.</span>}
                     </p>
+                    {flag !== "ok" && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setAdding(n)}
+                          className="rounded-full bg-surface-muted px-3.5 py-1.5 text-sm font-semibold"
+                        >
+                          + Add as new player
+                        </button>
+                        {flag === "waiting" ? (
+                          <button
+                            type="button"
+                            onClick={() => updateNote(n.id, { wait: false })}
+                            className="rounded-full px-3.5 py-1.5 text-sm font-semibold text-accent-ink"
+                          >
+                            Undo hold
+                          </button>
+                        ) : (
+                          flag === "unassigned" && (
+                            <button
+                              type="button"
+                              onClick={() => updateNote(n.id, { wait: true, playerId: null })}
+                              className="rounded-full bg-surface-muted px-3.5 py-1.5 text-sm font-semibold"
+                            >
+                              ⏳ Hold for later
+                            </button>
+                          )
+                        )}
+                      </div>
+                    )}
                     <textarea
                       value={n.text}
                       onChange={(e) => updateNote(n.id, { text: e.target.value })}
@@ -541,6 +624,24 @@ export function NotesScanner({
         );
       })}
 
+      {adding && (
+        <NewPlayerSheet
+          eventId={eventId}
+          writtenName={adding.writtenName}
+          writtenJersey={adding.writtenJersey}
+          onClose={() => setAdding(null)}
+          onAdded={(player) => {
+            setPlayers((current) =>
+              current.some((p) => p.id === player.id)
+                ? current
+                : [...current, player].sort((a, b) => sortName(a.name).localeCompare(sortName(b.name))),
+            );
+            updateNote(adding.id, { playerId: player.id, wait: false });
+            setAdding(null);
+          }}
+        />
+      )}
+
       <button
         type="button"
         onClick={discardAll}
@@ -553,7 +654,7 @@ export function NotesScanner({
         {error && <p className="mb-2 text-sm text-red">{error}</p>}
         {!error && unassigned > 0 && !busy && (
           <p className="mb-2 text-center text-sm text-muted">
-            Assign or remove {unassigned} unassigned note{unassigned === 1 ? "" : "s"} to save.
+            Assign, hold or remove {unassigned} unassigned note{unassigned === 1 ? "" : "s"} to save.
           </p>
         )}
         <button
@@ -572,6 +673,12 @@ export function NotesScanner({
     </div>
   );
 }
+
+// "Maya Johnson" → "Johnson Maya", to keep the list in last-name order.
+const sortName = (name: string) => {
+  const parts = name.split(" ");
+  return `${parts.slice(1).join(" ")} ${parts[0]}`;
+};
 
 // "#7 Maya Johnson", with more detail when two players share a name.
 function playerLabel(p: ScanPlayer, all: ScanPlayer[]) {

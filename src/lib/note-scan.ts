@@ -89,8 +89,11 @@ export type PageNote = {
   text: string;
   playerId: string | null;
   status: MatchStatus;
-  // What identified the player on the page, e.g. "#7 Maya".
+  // What identified the player on the page, e.g. "#7 Maya", and its parts
+  // (to fill in "Add as new player").
   writtenAs: string | null;
+  writtenName: string | null;
+  writtenJersey: string | null;
   hardToRead: boolean;
 };
 
@@ -140,7 +143,15 @@ If the page has no handwritten notes, return an empty list.`,
       const writtenAs =
         [n.written_jersey && `#${n.written_jersey.replace(/^#/, "")}`, n.written_name].filter(Boolean).join(" ") || null;
       const { playerId, status } = checkMatch(n, n.player ? byId.get(n.player) : undefined, roster);
-      return { text: n.text.trim(), playerId, status, writtenAs, hardToRead: n.hard_to_read };
+      return {
+        text: n.text.trim(),
+        playerId,
+        status,
+        writtenAs,
+        writtenName: n.written_name?.trim() || null,
+        writtenJersey: n.written_jersey?.replace(/^#/, "").trim() || null,
+        hardToRead: n.hard_to_read,
+      };
     });
 }
 

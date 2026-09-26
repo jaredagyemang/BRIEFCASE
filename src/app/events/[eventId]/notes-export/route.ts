@@ -29,7 +29,7 @@ export async function GET(request: Request, { params }: RouteContext<"/events/[e
   if (!UUID.test(eventId)) return new Response("Not found", { status: 404 });
   const supabase = await createAuthedClient();
 
-  const [{ data: event }, { data: notes, error }, { data: jerseys }] = await Promise.all([
+  const [{ data: event }, { data: notes, error }, { data: jerseys }, { data: waiting }] = await Promise.all([
     supabase.from("events").select("name").eq("id", eventId).maybeSingle<{ name: string }>(),
     supabase
       .from("evaluations")
@@ -41,6 +41,12 @@ export async function GET(request: Request, { params }: RouteContext<"/events/[e
       .order("created_at", { ascending: true })
       .returns<NoteRow[]>(),
     supabase.from("event_players").select("player_id, jersey_number").eq("event_id", eventId),
+    supabase
+      .from("waiting_notes")
+      .select("note_text, written_as, created_at, author:staff(full_name)")
+      .eq("event_id", eventId)
+      .order("created_at", { ascending: true })
+      .returns<{ note_text: string; written_as: string | null; created_at: string; author: { full_name: string } | null }[]>(),
   ]);
   if (!event) return new Response("Not found", { status: 404 });
   if (error) return new Response("Couldn't load the notes. Try again.", { status: 500 });
@@ -84,8 +90,17 @@ export async function GET(request: Request, { params }: RouteContext<"/events/[e
       return { player, text, type, by: n.author?.full_name ?? "Shared login", date: formatDate.format(new Date(n.created_at)) };
     });
 
+  // Notes still waiting for their player, at the end.
+  const waitingRows = (waiting ?? []).map((w) => ({
+    player: null,
+    text: w.written_as ? `(Written as “${w.written_as}”)\n${w.note_text}` : w.note_text,
+    type: "Waiting for a player",
+    by: w.author?.full_name ?? "Shared login",
+    date: formatDate.format(new Date(w.created_at)),
+  }));
+
   const name = exportFileName(event.name, "notes");
-  return new Response(eventNotesXlsx(event.name, rows), {
+  return new Response(eventNotesXlsx(event.name, [...rows, ...waitingRows]), {
     headers: {
       "Content-Type": XLSX_TYPE,
       "Content-Disposition": `attachment; filename="${name}"`,

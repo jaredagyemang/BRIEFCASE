@@ -173,7 +173,8 @@ export async function updateNote(noteId: string, text: string): Promise<NoteResu
 }
 
 // Removes a note and, for voice notes, its recording. A handwritten note's
-// photo is removed too, unless another note from the same page still uses it.
+// photo is removed too, unless another note from the same page (saved or
+// waiting for a player) still uses it.
 export async function deleteNote(noteId: string): Promise<NoteResult> {
   const { supabase, note, error } = await loadEditableNote(noteId);
   if (!note) return { ok: false, error };
@@ -192,11 +193,11 @@ export async function deleteNote(noteId: string): Promise<NoteResult> {
     if (removeError) console.error("Couldn't remove voice note file", note.raw_audio_url, removeError);
   }
   if (note.note_image_url) {
-    const { count } = await supabase
-      .from("evaluations")
-      .select("id", { count: "exact", head: true })
-      .eq("note_image_url", note.note_image_url);
-    if (count === 0) {
+    const [{ count: saved }, { count: waiting }] = await Promise.all([
+      supabase.from("evaluations").select("id", { count: "exact", head: true }).eq("note_image_url", note.note_image_url),
+      supabase.from("waiting_notes").select("id", { count: "exact", head: true }).eq("note_image_url", note.note_image_url),
+    ]);
+    if (saved === 0 && waiting === 0) {
       const { error: removeError } = await supabase.storage.from("note-photos").remove([note.note_image_url]);
       if (removeError) console.error("Couldn't remove note photo", note.note_image_url, removeError);
     }
