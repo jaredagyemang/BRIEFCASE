@@ -6,7 +6,8 @@ import type { PlayerDuplicate } from "@/app/players/actions";
 import { isEmail } from "@/lib/form";
 import { normalizeGpa, readRosterGpa } from "@/lib/gpa";
 import { findMatchesForMany } from "@/lib/duplicates-server";
-import { RosterScanError, scanRosterImage } from "@/lib/roster-scan";
+import { RosterLinkError, fetchRosterPage } from "@/lib/roster-link";
+import { RosterScanError, scanRosterImage, scanRosterPage, type ScannedRoster } from "@/lib/roster-scan";
 import { createAuthedClient } from "@/lib/supabase/server";
 
 // A roster row as edited on the review screen (all text, straight from inputs).
@@ -56,13 +57,11 @@ function keyFields(row: Pick<RosterRow, "first_name" | "last_name" | "grad_year"
 }
 
 // Step 1: read the photo and return editable rows plus any existing matches.
-export async function scanRoster(
-  eventId: string,
-  formData: FormData,
-): Promise<
+export type ScanResult =
   | { ok: true; teamName: string; rows: RosterRow[]; matches: PlayerDuplicate[][] }
-  | { ok: false; error: string }
-> {
+  | { ok: false; error: string };
+
+export async function scanRoster(eventId: string, formData: FormData): Promise<ScanResult> {
   const photo = formData.get("photo");
   if (!(photo instanceof Blob) || photo.size === 0) return { ok: false, error: "No photo was received. Try again." };
   if (photo.size > IMAGE_MAX_BYTES) return { ok: false, error: "That photo is too large. Try taking it again." };
@@ -81,7 +80,59 @@ export async function scanRoster(
     return { ok: false, error: error instanceof RosterScanError ? error.message : "Scanning failed. Try again." };
   }
 
-  const rows: RosterRow[] = roster.players.slice(0, MAX_ROWS).map((p) => {
+  const rows = toRows(roster);
+  if (rows.length === 0) {
+    return {
+      ok: false,
+      error: "Couldn't find any players in that photo. Get the whole roster in frame, in good light, and try again.",
+    };
+  }
+
+  const matches = await matchesInEvent(supabase, eventId, rows);
+  return { ok: true, teamName: roster.team_name ?? "", rows, matches };
+}
+
+// Step 1, from a link instead of a photo: read the roster web page or Google
+// Doc/Sheet and return the same editable rows and matches.
+export async function scanRosterLink(eventId: string, link: string): Promise<ScanResult> {
+  if (typeof link !== "string" || !link.trim()) return { ok: false, error: "Paste a link to the roster first." };
+  if (link.length > 2000) return { ok: false, error: "That link is too long. Copy just the page address." };
+
+  const supabase = await createAuthedClient();
+
+  let roster;
+  try {
+    const page = await fetchRosterPage(link);
+    roster = await scanRosterPage(page);
+  } catch (error) {
+    if (error instanceof RosterLinkError || error instanceof RosterScanError) return { ok: false, error: error.message };
+    console.error("Roster link failed", error);
+    return { ok: false, error: "Couldn't read that link. Try again." };
+  }
+
+  if (roster.page_kind === "sign_in_or_blocked") {
+    return {
+      ok: false,
+      error:
+        "That page asks you to sign in (or blocks outside access), so Briefcase can't read it. Try a public link to the roster, or take a photo or screenshot of it and use Scan roster.",
+    };
+  }
+  const rows = toRows(roster);
+  if (rows.length === 0) {
+    return {
+      ok: false,
+      error:
+        "No players found on that page. Make sure the link goes to the roster itself, not the team's home page. If you can see the roster in your browser, take a screenshot and use Scan roster instead.",
+    };
+  }
+
+  const matches = await matchesInEvent(supabase, eventId, rows);
+  return { ok: true, teamName: roster.team_name ?? "", rows, matches };
+}
+
+// Claude's roster → rows for the review screen.
+function toRows(roster: ScannedRoster): RosterRow[] {
+  return roster.players.slice(0, MAX_ROWS).map((p) => {
     const gpa = readRosterGpa(p.gpa_as_written);
     return {
       jersey_number: p.jersey_number ?? "",
@@ -96,15 +147,6 @@ export async function scanRoster(
       unclear: p.unclear,
     };
   });
-  if (rows.length === 0) {
-    return {
-      ok: false,
-      error: "Couldn't find any players in that photo. Get the whole roster in frame, in good light, and try again.",
-    };
-  }
-
-  const matches = await matchesInEvent(supabase, eventId, rows);
-  return { ok: true, teamName: roster.team_name ?? "", rows, matches };
 }
 
 // Re-checks existing matches after names or grad years are edited.
