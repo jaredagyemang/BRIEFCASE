@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { EventStatusButton } from "@/components/event-status-button";
+import { ExportNotesLink } from "@/components/export-notes-link";
 import { SearchBox } from "@/components/search-box";
 import { StatusPill } from "@/components/status-pill";
 import { describePlayer, duplicateIds } from "@/lib/duplicates";
@@ -29,7 +30,7 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
   const event = await getEvent(eventId);
   const supabase = await createClient();
 
-  const [{ data, error }, { data: allPlayers }] = await Promise.all([
+  const [{ data, error }, { data: allPlayers }, { count: waitingNotes }] = await Promise.all([
     supabase
       .from("event_players")
       .select("jersey_number, traffic_light, player:players!inner(id, first_name, last_name, grad_year, position, club_team, lifecycle_status)")
@@ -40,6 +41,8 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
       .from("players")
       .select("id, first_name, last_name, grad_year")
       .returns<Pick<Player, "id" | "first_name" | "last_name" | "grad_year">[]>(),
+    // Handwritten notes still waiting for their player to be added.
+    supabase.from("waiting_notes").select("id", { count: "exact", head: true }).eq("event_id", eventId),
   ]);
   const duplicates = duplicateIds(allPlayers ?? []);
   const everyone = data ?? [];
@@ -93,34 +96,55 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
 
       <div className="mt-4">
         <h1 className="text-2xl font-bold tracking-tight">{event.name}</h1>
-        <p className="mt-0.5 text-muted">
-          {formatEventDate(event.event_date)} · {everyone.length} player{everyone.length === 1 ? "" : "s"}
-          {event.status === "closed" && (
-            <span className="ml-2 rounded-full bg-surface-muted px-2 py-0.5 text-xs font-semibold">Closed</span>
-          )}
-        </p>
+        <div className="mt-0.5 flex items-baseline justify-between gap-3">
+          <p className="min-w-0 text-muted">
+            {formatEventDate(event.event_date)} · {everyone.length} player{everyone.length === 1 ? "" : "s"}
+            {event.status === "closed" && (
+              <span className="ml-2 rounded-full bg-surface-muted px-2 py-0.5 text-xs font-semibold">Closed</span>
+            )}
+          </p>
+          <ExportNotesLink href={`${eventPath(eventId)}/notes-export`} />
+        </div>
       </div>
 
-      <div className="mt-4 flex gap-2">
+      <div className="mt-4 grid grid-cols-2 gap-2">
         <Link
           href={`${eventPath(eventId)}/scan`}
-          className="flex-1 rounded-2xl bg-surface-muted py-3 text-center text-sm font-semibold"
+          className="rounded-2xl bg-surface-muted py-3 text-center text-sm font-semibold"
         >
           📷 Scan roster
         </Link>
         <Link
           href={`${eventPath(eventId)}/scan?source=link`}
-          className="flex-1 rounded-2xl bg-surface-muted py-3 text-center text-sm font-semibold"
+          className="rounded-2xl bg-surface-muted py-3 text-center text-sm font-semibold"
         >
           🔗 Paste link
         </Link>
         <Link
+          href={`${eventPath(eventId)}/scan-notes`}
+          className="rounded-2xl bg-surface-muted py-3 text-center text-sm font-semibold"
+        >
+          ✍️ Scan notes
+        </Link>
+        <Link
           href={`${eventPath(eventId)}/players/new`}
-          className="flex-1 rounded-2xl bg-accent py-3 text-center text-sm font-semibold text-accent-foreground"
+          className="rounded-2xl bg-accent py-3 text-center text-sm font-semibold text-accent-foreground"
         >
           + Add player
         </Link>
       </div>
+
+      {(waitingNotes ?? 0) > 0 && (
+        <Link
+          href={`${eventPath(eventId)}/waiting-notes`}
+          className="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-yellow/10 px-4 py-3 text-sm font-medium"
+        >
+          <span>
+            ⏳ {waitingNotes} note{waitingNotes === 1 ? "" : "s"} waiting for a player
+          </span>
+          <span className="text-muted">›</span>
+        </Link>
+      )}
 
       {added > 0 && (
         <p className="mt-4 rounded-2xl bg-green/15 px-4 py-3 text-sm font-medium" role="status">

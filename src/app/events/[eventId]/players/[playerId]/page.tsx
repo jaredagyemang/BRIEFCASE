@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ContactActions } from "@/components/contact-actions";
 import { DetailList } from "@/components/detail-list";
+import { PhotoThumb } from "@/components/photo-viewer";
 import { PlayerNotes, type NoteItem } from "@/components/player-notes";
 import { RatingButtons } from "@/components/rating-buttons";
 import { StatusSelect } from "@/components/status-select";
@@ -19,6 +20,7 @@ type EvaluationRow = {
   traffic_light_rating: TrafficLight | null;
   transcript_text: string | null;
   raw_audio_url: string | null;
+  note_image_url: string | null;
   created_at: string;
   rated_by: string | null;
   author: { full_name: string } | null;
@@ -49,7 +51,7 @@ export default async function EventPlayerPage({ params, searchParams }: PageProp
       // Every rating and note for this player, across all events.
       supabase
         .from("evaluations")
-        .select("id, event_id, traffic_light_rating, transcript_text, raw_audio_url, created_at, rated_by, author:staff(full_name)")
+        .select("id, event_id, traffic_light_rating, transcript_text, raw_audio_url, note_image_url, created_at, rated_by, author:staff(full_name)")
         .eq("player_id", playerId)
         .order("created_at", { ascending: false })
         .limit(300)
@@ -77,6 +79,13 @@ export default async function EventPlayerPage({ params, searchParams }: PageProp
     ? await supabase.storage.from("voice-notes").createSignedUrls(audioPaths, 60 * 60)
     : { data: [] };
   const signedUrl = new Map(signed?.map((s) => [s.path, s.signedUrl]));
+  // Photos of handwritten notes, the same way. (Pages shared by several notes
+  // are signed once.)
+  const photoPaths = [...new Set((evaluations ?? []).flatMap((e) => (e.note_image_url ? [e.note_image_url] : [])))];
+  const { data: signedPhotos } = photoPaths.length
+    ? await supabase.storage.from("note-photos").createSignedUrls(photoPaths, 60 * 60)
+    : { data: [] };
+  const photoUrl = new Map(signedPhotos?.map((s) => [s.path, s.signedUrl]));
 
   const ratingsFor = (id: string): Rating[] =>
     (evaluations ?? []).flatMap((e) => {
@@ -91,6 +100,7 @@ export default async function EventPlayerPage({ params, searchParams }: PageProp
         text: e.transcript_text,
         audioUrl: e.raw_audio_url ? (signedUrl.get(e.raw_audio_url) ?? null) : null,
         isVoice: Boolean(e.raw_audio_url),
+        photoUrl: e.note_image_url ? (photoUrl.get(e.note_image_url) ?? null) : null,
         author: e.author?.full_name ?? null,
         when: timeAgo(e.created_at),
         canEdit: !e.rated_by || e.rated_by === currentUser?.id,
@@ -207,8 +217,11 @@ export default async function EventPlayerPage({ params, searchParams }: PageProp
                         <p className="text-muted italic">{n.text === "" ? "No speech detected" : "Not transcribed"}</p>
                       )}
                       {n.audioUrl && <audio src={n.audioUrl} controls preload="none" className="mt-2 h-9 w-full" />}
+                      {n.photoUrl && (
+                        <PhotoThumb src={n.photoUrl} alt="Handwritten note" className="mt-2 block h-16 w-12" />
+                      )}
                       <p className="mt-1 text-xs text-muted">
-                        {n.isVoice ? "🎙️ Voice · " : ""}
+                        {n.isVoice ? "🎙️ Voice · " : n.photoUrl ? "✍️ Handwritten · " : ""}
                         {n.author ?? "Shared login"} · {n.when}
                       </p>
                     </li>
