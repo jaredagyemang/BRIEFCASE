@@ -1,5 +1,5 @@
-import { DisconnectGmailButton } from "@/components/disconnect-gmail-button";
-import { GmailLinks } from "@/components/gmail-links";
+import { DocketFeed } from "@/components/docket-feed";
+import { PageScroller } from "@/components/page-scroller";
 import { getConnectionSummary } from "@/lib/gmail/connection";
 
 // Results of the Connect Gmail round trip, from ?gmail=…
@@ -14,15 +14,24 @@ const MESSAGES: Record<string, { tone: "good" | "bad"; text: string }> = {
   "not-configured": { tone: "bad", text: "Gmail isn’t set up on this server yet (missing Google credentials)." },
 };
 
-// Daily Mode. For now: video and Google Doc links from the coach's recent
-// email; the video swiper comes next.
+// Daily Mode: a full-screen feed of the film (and Google Docs) coaches are
+// sent by email, or a Connect Gmail card until Gmail is connected.
 export default async function DocketPage({ searchParams }: PageProps<"/docket">) {
   const params = await searchParams;
   const message = typeof params.gmail === "string" ? MESSAGES[params.gmail] : undefined;
   const connection = await getConnectionSummary();
 
+  if (connection) {
+    return (
+      <DocketFeed
+        connectedEmail={connection.google_email}
+        notice={message?.tone === "good" ? message.text : undefined}
+      />
+    );
+  }
+
   return (
-    <div>
+    <PageScroller>
       <p className="text-sm font-semibold tracking-wide text-accent-ink uppercase">Daily Mode</p>
       <h1 className="text-3xl font-bold tracking-tight">The Docket</h1>
 
@@ -37,24 +46,8 @@ export default async function DocketPage({ searchParams }: PageProps<"/docket">)
         </p>
       )}
 
-      {connection ? (
-        <>
-          <div className="mt-6 flex items-center gap-3 rounded-2xl bg-surface px-4 py-3">
-            <span className="text-xl" aria-hidden>
-              ✉️
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm text-muted">Gmail connected</p>
-              <p className="truncate font-medium">{connection.google_email}</p>
-            </div>
-            <DisconnectGmailButton email={connection.google_email} />
-          </div>
-          <GmailLinks connectedEmail={connection.google_email} />
-        </>
-      ) : (
-        <ConnectGmailCard />
-      )}
-    </div>
+      <ConnectGmailCard />
+    </PageScroller>
   );
 }
 

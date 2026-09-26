@@ -65,6 +65,14 @@ export function startModeSlide(direction: 1 | -1, from: string) {
   cover.addEventListener("click", swallow, true);
   cover.addEventListener("submit", swallow, true);
   for (const el of cover.querySelectorAll<HTMLElement>("a, button, input, textarea, select, [tabindex]")) el.tabIndex = -1;
+  // Embedded players (The Docket's videos) would reload inside a copy; a dark
+  // block of the same size stands in for them during the slide.
+  for (const frame of cover.querySelectorAll("iframe")) {
+    const stand = document.createElement("div");
+    stand.className = frame.className;
+    stand.style.background = "#000";
+    frame.replaceWith(stand);
+  }
   main.append(cover);
   copyScrollPositions(screen, cover);
   slide = { cover, direction, from, giveUp: setTimeout(removeCover, GIVE_UP_AFTER) };

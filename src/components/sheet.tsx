@@ -11,7 +11,7 @@ export function Sheet({ children, onClose }: { children: React.ReactNode; onClos
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center sm:items-center">
+    <div className="pointer-events-auto fixed inset-0 z-40 flex items-end justify-center sm:items-center">
       <button
         type="button"
         aria-label="Close"
