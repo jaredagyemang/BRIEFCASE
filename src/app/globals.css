@@ -71,8 +71,8 @@
   --font-mono: var(--font-geist-mono);
 }
 
-/* Sideways swipes switch modes, so the page itself shouldn't treat them as
-   "go back" (the browser's own edge-swipe still works). */
+/* Screens use sideways swipes themselves (sliders, The Docket), so the page
+   shouldn't treat them as "go back" (the browser's own edge-swipe still works). */
 html {
   overscroll-behavior-x: none;
 }
