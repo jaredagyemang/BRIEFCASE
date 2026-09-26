@@ -1,6 +1,7 @@
 import { DocketFeed } from "@/components/docket-feed";
 import { PageScroller } from "@/components/page-scroller";
 import { getConnectionSummary } from "@/lib/gmail/connection";
+import { getCurrentUser } from "@/lib/staff";
 
 // Results of the Connect Gmail round trip, from ?gmail=…
 const MESSAGES: Record<string, { tone: "good" | "bad"; text: string }> = {
@@ -19,12 +20,13 @@ const MESSAGES: Record<string, { tone: "good" | "bad"; text: string }> = {
 export default async function DocketPage({ searchParams }: PageProps<"/docket">) {
   const params = await searchParams;
   const message = typeof params.gmail === "string" ? MESSAGES[params.gmail] : undefined;
-  const connection = await getConnectionSummary();
+  const [connection, user] = await Promise.all([getConnectionSummary(), getCurrentUser()]);
 
   if (connection) {
     return (
       <DocketFeed
         connectedEmail={connection.google_email}
+        coachName={user?.name ?? "Coach"}
         notice={message?.tone === "good" ? message.text : undefined}
       />
     );

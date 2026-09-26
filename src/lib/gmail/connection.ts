@@ -1,22 +1,12 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { decryptToken, encryptToken } from "./crypto";
-import {
-  GMAIL_READONLY,
-  GmailUnauthorizedError,
-  GoogleAuthError,
-  getMessage,
-  listMessageIds,
-  refreshAccessToken,
-  revokeToken,
-  type GmailPart,
-} from "./google";
-import { extractLinks, type FoundLink } from "./links";
+import { GMAIL_READONLY, GmailUnauthorizedError, GoogleAuthError, refreshAccessToken, revokeToken, type GmailPart } from "./google";
 
 // A coach's Gmail connection (one row in gmail_connections, readable only by
 // them). Tokens are decrypted only here, on the server, when needed.
 
-type ConnectionRow = {
+export type ConnectionRow = {
   staff_id: string;
   google_email: string;
   refresh_token: string;
@@ -26,7 +16,7 @@ type ConnectionRow = {
   connected_at: string;
 };
 
-async function signedInUserId(supabase: Awaited<ReturnType<typeof createClient>>) {
+export async function signedInUserId(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data } = await supabase.auth.getClaims();
   const id = data?.claims?.sub;
   if (!id) throw new Error("Not signed in");
@@ -104,34 +94,53 @@ async function accessToken(row: ConnectionRow, force = false) {
   return fresh.access_token;
 }
 
-// --- Finding links in recent emails -------------------------------------------
+// --- Using the connection ------------------------------------------------------
 
-export const LOOKBACK_DAYS = 30;
-export const MAX_EMAILS = 100;
-// Gmail search narrows the emails down; each one is then read to pull out the
-// actual links (search matches loosely, e.g. a mention of "youtube.com").
-const SEARCH = `newer_than:${LOOKBACK_DAYS}d {youtube.com youtu.be hudl.com veo.co docs.google.com}`;
+export class ConnectionExpiredError extends Error {}
 
-export type EmailWithLinks = {
-  id: string;
-  from: string;
-  subject: string;
-  date: string | null;
-  links: FoundLink[];
-};
+// The signed-in coach's connection, or null if they haven't connected Gmail
+// (or it no longer includes read access).
+export async function loadConnection() {
+  const supabase = await createClient();
+  const { data: row } = await supabase.from("gmail_connections").select("*").maybeSingle<ConnectionRow>();
+  if (!row) return null;
+  return { supabase, row };
+}
 
-export type GmailLinksResult =
-  | { status: "not_connected" }
-  | { status: "expired" }
-  | { status: "error"; message: string }
-  | { status: "ok"; googleEmail: string; emails: EmailWithLinks[]; scanned: number };
+// Runs fn with a working access token. If Gmail rejects a stored token, it's
+// refreshed once and fn retried. If the connection no longer works at all
+// (revoked, or expired after 7 days in Testing mode) it's removed and
+// ConnectionExpiredError thrown, so the coach is asked to reconnect.
+export async function withGmail<T>(
+  connection: NonNullable<Awaited<ReturnType<typeof loadConnection>>>,
+  fn: (token: string) => Promise<T>,
+): Promise<T> {
+  const { supabase, row } = connection;
+  if (!row.scopes.split(" ").includes(GMAIL_READONLY)) throw new ConnectionExpiredError();
+  try {
+    try {
+      return await fn(await accessToken(row));
+    } catch (error) {
+      if (!(error instanceof GmailUnauthorizedError)) throw error;
+      return await fn(await accessToken(row, true));
+    }
+  } catch (error) {
+    if ((error instanceof GoogleAuthError && error.code === "invalid_grant") || error instanceof GmailUnauthorizedError) {
+      await supabase.from("gmail_connections").delete().eq("staff_id", row.staff_id);
+      throw new ConnectionExpiredError();
+    }
+    throw error;
+  }
+}
 
-const header = (part: GmailPart | undefined, name: string) =>
+// --- Reading a message -------------------------------------------------------------
+
+export const header = (part: GmailPart | undefined, name: string) =>
   part?.headers?.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value ?? "";
 
 // All the text and HTML in a message, including nested parts (attachments are
 // skipped: their data isn't in the message body).
-function bodyText(part: GmailPart | undefined): string {
+export function bodyText(part: GmailPart | undefined): string {
   if (!part) return "";
   const own =
     part.body?.data && /^text\/(plain|html)/.test(part.mimeType ?? "")
@@ -140,57 +149,44 @@ function bodyText(part: GmailPart | undefined): string {
   return [own, ...(part.parts ?? []).map(bodyText)].join("\n");
 }
 
-// "Coach Smith <smith@club.org>" → "Coach Smith"; a bare address stays as is.
-function senderName(from: string) {
-  const match = from.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
-  return match ? match[1].trim() || match[2] : from.trim();
-}
-
-async function inBatches<T, R>(items: T[], size: number, fn: (item: T) => Promise<R>) {
-  const results: R[] = [];
-  for (let i = 0; i < items.length; i += size) results.push(...(await Promise.all(items.slice(i, i + size).map(fn))));
-  return results;
-}
-
-export async function findLinksInRecentEmails(): Promise<GmailLinksResult> {
-  const supabase = await createClient();
-  const { data: row } = await supabase.from("gmail_connections").select("*").maybeSingle<ConnectionRow>();
-  if (!row) return { status: "not_connected" };
-  if (!row.scopes.split(" ").includes(GMAIL_READONLY)) return { status: "expired" };
-
-  const read = async (token: string) => {
-    const ids = await listMessageIds(token, SEARCH, MAX_EMAILS);
-    const messages = await inBatches(ids, 10, (id) => getMessage(token, id));
-    return messages;
+// Readable text for the AI: the plain-text part when there is one, otherwise
+// the HTML with tags removed.
+export function readableText(part: GmailPart | undefined): string {
+  const parts: { type: string; text: string }[] = [];
+  const walk = (p: GmailPart | undefined) => {
+    if (!p) return;
+    if (p.body?.data && /^text\/(plain|html)/.test(p.mimeType ?? "")) {
+      parts.push({ type: p.mimeType!, text: Buffer.from(p.body.data, "base64url").toString("utf8") });
+    }
+    p.parts?.forEach(walk);
   };
+  walk(part);
+  const plain = parts.filter((p) => p.type.startsWith("text/plain")).map((p) => p.text);
+  if (plain.length) return plain.join("\n\n");
+  return parts
+    .map((p) =>
+      p.text
+        .replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ")
+        .replace(/<br\s*\/?>|<\/(p|div|li|tr|h\d)>/gi, "\n")
+        .replace(/<a\s[^>]*href="([^"]+)"[^>]*>/gi, " $1 ")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&#39;|&apos;/g, "'")
+        .replace(/&quot;/g, '"')
+        .replace(/[ \t]+/g, " ")
+        .replace(/\n\s*\n+/g, "\n\n"),
+    )
+    .join("\n\n")
+    .trim();
+}
 
-  try {
-    let messages;
-    try {
-      messages = await read(await accessToken(row));
-    } catch (error) {
-      // The stored access token was rejected (e.g. revoked early): refresh once.
-      if (!(error instanceof GmailUnauthorizedError)) throw error;
-      messages = await read(await accessToken(row, true));
-    }
-    const emails = messages
-      .map((m): EmailWithLinks => ({
-        id: m.id,
-        from: senderName(header(m.payload, "From")) || "Unknown sender",
-        subject: header(m.payload, "Subject") || "(no subject)",
-        date: m.internalDate ? new Date(Number(m.internalDate)).toISOString() : null,
-        links: extractLinks(bodyText(m.payload)),
-      }))
-      .filter((e) => e.links.length > 0)
-      .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
-    return { status: "ok", googleEmail: row.google_email, emails, scanned: messages.length };
-  } catch (error) {
-    if ((error instanceof GoogleAuthError && error.code === "invalid_grant") || error instanceof GmailUnauthorizedError) {
-      // The connection no longer works; remove it so the coach can reconnect.
-      await supabase.from("gmail_connections").delete().eq("staff_id", row.staff_id);
-      return { status: "expired" };
-    }
-    console.error("Reading Gmail failed", error);
-    return { status: "error", message: error instanceof Error ? error.message : "Couldn't read Gmail." };
-  }
+// "Coach Smith <smith@club.org>" → { name: "Coach Smith", email: "smith@club.org" }.
+export function parseAddress(from: string) {
+  const match = from.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
+  if (match) return { name: match[1].trim() || match[2].trim(), email: match[2].trim() };
+  const bare = from.trim();
+  return { name: bare, email: /@/.test(bare) ? bare : null };
 }
