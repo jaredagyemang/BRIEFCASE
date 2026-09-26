@@ -18,8 +18,13 @@ export const GMAIL_READONLY = "https://www.googleapis.com/auth/gmail.readonly";
 // Sending replies from the Info card (send only: it can't read, change or
 // delete anything by itself).
 export const GMAIL_SEND = "https://www.googleapis.com/auth/gmail.send";
-// Read-only Gmail, sending replies, and the address of the account.
-const SCOPES = ["openid", "email", GMAIL_READONLY, GMAIL_SEND];
+// Moving an email to Gmail's Trash from the Info card ("Delete"). Gmail
+// empties Trash after 30 days. (Deleting outright would need full access to
+// the whole mailbox, which Briefcase doesn't ask for.)
+export const GMAIL_MODIFY = "https://www.googleapis.com/auth/gmail.modify";
+// Read-only Gmail, sending replies, moving emails to Trash, and the address
+// of the account.
+const SCOPES = ["openid", "email", GMAIL_READONLY, GMAIL_SEND, GMAIL_MODIFY];
 
 function credentials() {
   const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -165,4 +170,9 @@ export function getMessage(accessToken: string, id: string) {
 // Sends a raw RFC 2822 message (base64url), as a reply in the given thread.
 export function sendMessage(accessToken: string, raw: string, threadId: string) {
   return gmail<{ id: string; threadId: string }>("/users/me/messages/send", accessToken, { raw, threadId });
+}
+
+// Moves a message to Trash (Gmail deletes it for good after 30 days).
+export function trashMessage(accessToken: string, id: string) {
+  return gmail<{ id: string }>(`/users/me/messages/${encodeURIComponent(id)}/trash`, accessToken, {});
 }

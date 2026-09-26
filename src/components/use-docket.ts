@@ -16,7 +16,7 @@ export function clearDocketCache() {
 
 // How many emails the AI reads per request (in feed order, so the players at
 // the top fill in first).
-const EXTRACT_BATCH = 4;
+const EXTRACT_BATCH = 8;
 
 export function useDocket(connectedEmail: string) {
   const [result, setResultState] = useState<DocketResult | null>(() =>
@@ -69,7 +69,13 @@ export function useDocket(connectedEmail: string) {
       .then((cards) => {
         setResult((prev) =>
           prev?.status === "ok"
-            ? { ...prev, emails: prev.emails.map((e) => (cards[e.id] ? { ...e, info: cards[e.id] } : e)) }
+            ? {
+                ...prev,
+                emails: prev.emails
+                  .map((e) => (cards[e.id] ? { ...e, info: cards[e.id] } : e))
+                  // Not a recruiting email at all: leave it out.
+                  .filter((e) => e.info?.recruiting !== "no"),
+              }
             : prev,
         );
         setFailed((prev) => new Set([...prev, ...ids.filter((id) => !cards[id])]));

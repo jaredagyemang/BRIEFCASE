@@ -8,9 +8,26 @@ import {
   readableText,
   withGmail,
 } from "./connection";
-import { DECLINING, REPLY_TEMPLATES, type DocketEmail, type DocketInfo, type DocketResult, type ReplyTemplate } from "./docket-types";
+import {
+  DECLINING,
+  REPLY_TEMPLATES,
+  isCurrentInfo,
+  type DocketEmail,
+  type DocketInfo,
+  type DocketResult,
+  type ReplyTemplate,
+} from "./docket-types";
 import { EXTRACTION_MODEL, extractInfo } from "./extract";
-import { GMAIL_SEND, GmailScopeError, getMessage, listMessageIds, sendMessage, type GmailMessage } from "./google";
+import {
+  GMAIL_MODIFY,
+  GMAIL_SEND,
+  GmailScopeError,
+  getMessage,
+  listMessageIds,
+  sendMessage,
+  trashMessage,
+  type GmailMessage,
+} from "./google";
 import { extractLinks, uniqueMedia } from "./links";
 
 // The Docket: recent emails with film links, each with an Info card the AI
@@ -88,15 +105,22 @@ export async function loadDocket(): Promise<DocketResult> {
           threadId: m.threadId,
           ...describe(m),
           links: extractLinks(bodyText(m.payload)),
-          info: item?.extraction ?? null,
+          // Cards saved before the recruiting check existed get read again.
+          info: isCurrentInfo(item?.extraction) ? item.extraction : null,
           replied: item?.replied_at && item.reply_template ? { template: item.reply_template, at: item.replied_at } : null,
           shortlisted: onShortlist.has(m.id),
         };
       })
       .filter((e) => {
         const item = byId.get(e.id);
-        // Skipped, or turned down with a reply: out of the feed.
-        return e.links.length > 0 && !item?.skipped_at && !(item?.reply_template && DECLINING.includes(item.reply_template));
+        // Skipped or deleted, turned down with a reply, or not a recruiting
+        // email at all: out of The Docket.
+        return (
+          e.links.length > 0 &&
+          !item?.skipped_at &&
+          !(item?.reply_template && DECLINING.includes(item.reply_template)) &&
+          e.info?.recruiting !== "no"
+        );
       })
       .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
 
@@ -104,6 +128,7 @@ export async function loadDocket(): Promise<DocketResult> {
       status: "ok",
       googleEmail: row.google_email,
       canSend: row.scopes.split(" ").includes(GMAIL_SEND),
+      canDelete: row.scopes.split(" ").includes(GMAIL_MODIFY),
       emails,
       scanned: messages.length,
     };
@@ -120,7 +145,7 @@ export async function extractInfoCards(messageIds: string[]): Promise<Record<str
   const connection = await loadConnection();
   if (!connection) return {};
   const { supabase, row } = connection;
-  const ids = [...new Set(messageIds)].slice(0, 6);
+  const ids = [...new Set(messageIds)].slice(0, 8);
 
   // Already read (e.g. in another tab): use that.
   const { data: done } = await supabase
@@ -129,7 +154,9 @@ export async function extractInfoCards(messageIds: string[]): Promise<Record<str
     .in("gmail_message_id", ids)
     .not("extraction", "is", null)
     .returns<Pick<ItemRow, "gmail_message_id" | "extraction">[]>();
-  const result: Record<string, DocketInfo | null> = Object.fromEntries((done ?? []).map((d) => [d.gmail_message_id, d.extraction]));
+  const result: Record<string, DocketInfo | null> = Object.fromEntries(
+    (done ?? []).filter((d) => isCurrentInfo(d.extraction)).map((d) => [d.gmail_message_id, d.extraction]),
+  );
 
   const todo = ids.filter((id) => !(id in result));
   await Promise.all(
@@ -283,5 +310,48 @@ export async function setShortlisted(messageId: string, shortlisted: boolean) {
 }
 
 export function emptyInfo(): DocketInfo {
-  return { name: null, position: null, grad_year: null, club: null, gpa: null, major: null, budget: null, more_players: false };
+  return {
+    name: null,
+    position: null,
+    grad_year: null,
+    club: null,
+    gpa: null,
+    major: null,
+    budget: null,
+    more_players: false,
+    recruiting: "unsure",
+  };
+}
+
+// --- Delete (move to Gmail's Trash) --------------------------------------------------
+
+export type DeleteResult = { ok: true } | { ok: false; reason: "reconnect" | "error"; message: string };
+
+// Moves the email to the coach's Gmail Trash (Gmail deletes it for good after
+// 30 days) and takes it out of The Docket.
+export async function trashEmail(messageId: string, threadId: string): Promise<DeleteResult> {
+  const connection = await loadConnection();
+  if (!connection) return { ok: false, reason: "reconnect", message: "Connect Gmail first." };
+  const { supabase, row } = connection;
+  if (!row.scopes.split(" ").includes(GMAIL_MODIFY)) {
+    return { ok: false, reason: "reconnect", message: "Reconnect Gmail to allow deleting emails." };
+  }
+  try {
+    await withGmail(connection, (token) => trashMessage(token, messageId));
+  } catch (error) {
+    if (error instanceof GmailScopeError || error instanceof ConnectionExpiredError) {
+      return { ok: false, reason: "reconnect", message: "Reconnect Gmail to allow deleting emails." };
+    }
+    console.error("Moving email to Trash failed", error);
+    return { ok: false, reason: "error", message: "Couldn’t delete the email. Try again." };
+  }
+  // Also hidden here, in case it's taken back out of Trash later.
+  const { error } = await supabase.from("docket_items").upsert({
+    staff_id: row.staff_id,
+    gmail_message_id: messageId,
+    gmail_thread_id: threadId,
+    skipped_at: new Date().toISOString(),
+  });
+  if (error) console.error("Deleted in Gmail but not recorded", error.message);
+  return { ok: true };
 }

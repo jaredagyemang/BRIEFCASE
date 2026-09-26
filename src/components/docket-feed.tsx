@@ -2,31 +2,35 @@
 
 import Link from "next/link";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
-import { disconnectGmail, sendReplyAction, shortlistAction, skipAction } from "@/app/docket/actions";
+import { deleteEmailAction, disconnectGmail, sendReplyAction, shortlistAction, skipAction } from "@/app/docket/actions";
 import { PageScroller } from "@/components/page-scroller";
 import { Sheet, SheetButton, SheetTitle } from "@/components/sheet";
 import { clearDocketCache, useDocket } from "@/components/use-docket";
 import {
   DECLINING,
   REPLY_TEMPLATES,
+  inRange,
+  rangeFor,
   type DocketEmail,
   type InfoField,
+  type RangeId,
   type ReplyTemplate,
 } from "@/lib/gmail/docket-types";
 import { PLATFORM_LABEL, googleDocPreview, uniqueMedia, youtubeVideo, type FoundLink } from "@/lib/gmail/links";
 import { TEMPLATE_LABEL, buildReply } from "@/lib/gmail/templates";
 
-// The Docket: one row per player (per email), newest first. Swipe up/down to
-// move between players, always landing on their Info card; swipe left/right
-// to go from the Info card through each of their videos. Arrow keys work too.
+// The Docket's review feed, for the time range chosen on its home screen:
+// one row per player (per email), newest first. Swipe up/down to move between
+// players, always landing on their Info card; swipe left/right to go from the
+// Info card through each of their videos. Arrow keys work too.
 export function DocketFeed({
   connectedEmail,
   coachName,
-  notice,
+  range,
 }: {
   connectedEmail: string;
   coachName: string;
-  notice?: string;
+  range: RangeId;
 }) {
   const docket = useDocket(connectedEmail);
   const { result, loading, reload } = docket;
@@ -75,7 +79,7 @@ export function DocketFeed({
 
   if (result.emails.length === 0) {
     return (
-      <StatePage connectedEmail={connectedEmail} onRefresh={reload} loading={loading} notice={notice}>
+      <StatePage connectedEmail={connectedEmail} onRefresh={reload} loading={loading}>
         <p className="font-semibold">Nothing to watch yet</p>
         <p className="mt-1 text-sm text-muted">
           No YouTube, Hudl, Veo or Google Doc links in your email from the last 30 days (or you’ve cleared them all).
@@ -95,11 +99,12 @@ export function DocketFeed({
   return (
     <Feed
       docket={docket}
-      emails={result.emails}
+      allEmails={result.emails}
+      range={range}
       canSend={result.canSend}
+      canDelete={result.canDelete}
       connectedEmail={connectedEmail}
       coachName={coachName}
-      notice={notice}
     />
   );
 }
@@ -117,20 +122,45 @@ type Toast = { message: string; undo?: () => void };
 
 function Feed({
   docket,
-  emails,
+  allEmails,
+  range,
   canSend,
+  canDelete,
   connectedEmail,
   coachName,
-  notice,
 }: {
   docket: ReturnType<typeof useDocket>;
-  emails: DocketEmail[];
+  allEmails: DocketEmail[];
+  range: RangeId;
   canSend: boolean;
+  canDelete: boolean;
   connectedEmail: string;
   coachName: string;
-  notice?: string;
 }) {
   const { loading, reload, reading, failed, retryInfo, updateEmail, removeEmail, restoreEmail } = docket;
+  const { hours, phrase } = rangeFor(range);
+
+  // Players to review: in the time range, read by the AI, and recruiting (or
+  // possibly recruiting). The order is fixed when the feed opens; players the
+  // AI finishes reading later are added at the end, so nothing moves above
+  // the one being watched.
+  // (An email the AI couldn't read is included too, with Try again on its
+  // card, rather than silently left out.)
+  const eligible = useMemo(
+    () =>
+      allEmails.filter(
+        (e) => (e.info ? e.info.recruiting !== "no" : failed.has(e.id)) && inRange(e, hours),
+      ),
+    [allEmails, hours, failed],
+  );
+  const [order, setOrder] = useState(() => eligible.map((e) => e.id));
+  const added = eligible.filter((e) => !order.includes(e.id)).map((e) => e.id);
+  if (added.length > 0) setOrder([...order, ...added]);
+  const emails = useMemo(() => {
+    const byId = new Map(eligible.map((e) => [e.id, e]));
+    return order.map((id) => byId.get(id)).filter((e): e is DocketEmail => Boolean(e));
+  }, [eligible, order]);
+  const pendingInRange = allEmails.filter((e) => !e.info && !failed.has(e.id) && inRange(e, hours)).length;
   const scrollerRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const media = useMemo(() => new Map(emails.map((e) => [e.id, uniqueMedia(e.links)])), [emails]);
@@ -223,7 +253,7 @@ function Feed({
   });
 
   // --- Messages at the top (with Undo where it makes sense) ---------------------
-  const [toast, setToast] = useState<Toast | null>(notice ? { message: notice } : null);
+  const [toast, setToast] = useState<Toast | null>(null);
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), toast.undo ? 5000 : 3000);
@@ -258,6 +288,11 @@ function Feed({
     });
   }
 
+  function deleted(email: DocketEmail) {
+    removeEmail(email.id);
+    setToast({ message: "Deleted. It’s in your Gmail Trash." });
+  }
+
   function replied(email: DocketEmail, template: ReplyTemplate) {
     if (DECLINING.includes(template)) {
       removeEmail(email.id);
@@ -266,6 +301,29 @@ function Feed({
       updateEmail(email.id, { replied: { template, at: new Date().toISOString() } });
       setToast({ message: "Reply sent" });
     }
+  }
+
+  if (emails.length === 0) {
+    return (
+      <FeedShell>
+        <div className="flex h-full flex-col items-center justify-center px-8 pb-28 text-center">
+          {pendingInRange > 0 ? (
+            <>
+              <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/20 border-t-accent" />
+              <p className="mt-4 text-white/80">Reading {pendingInRange} more {pendingInRange === 1 ? "email" : "emails"}…</p>
+            </>
+          ) : (
+            <>
+              <p className="text-lg font-semibold">All caught up</p>
+              <p className="mt-1 text-white/70">Nothing left to review from {phrase}.</p>
+            </>
+          )}
+          <Link href="/docket" className="mt-6 rounded-2xl bg-white/10 px-6 py-3 font-semibold">
+            Back to The Docket
+          </Link>
+        </div>
+      </FeedShell>
+    );
   }
 
   return (
@@ -296,8 +354,10 @@ function Feed({
               failed: failed.has(email.id),
               onRetry: () => retryInfo(email.id),
               canSend,
+              canDelete,
               coachName,
               onSkip: () => skip(email),
+              onDeleted: () => deleted(email),
               onShortlist: () => toggleShortlist(email),
               onReplied: (template) => replied(email, template),
             }}
@@ -308,7 +368,9 @@ function Feed({
       {/* Top bar over the feed */}
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent px-4 pt-3 pb-8">
         <p className="text-sm font-semibold">
-          <span className="text-accent">The Docket</span>
+          <Link href="/docket" className="pointer-events-auto text-accent">
+            ‹ The Docket
+          </Link>
           <span className="ml-2 text-white/70" aria-live="polite">
             {row + 1} / {emails.length}
           </span>
@@ -355,8 +417,10 @@ type InfoProps = {
   failed: boolean;
   onRetry: () => void;
   canSend: boolean;
+  canDelete: boolean;
   coachName: string;
   onSkip: () => void;
+  onDeleted: () => void;
   onShortlist: () => void;
   onReplied: (template: ReplyTemplate) => void;
 };
@@ -434,12 +498,15 @@ function InfoCard({
   failed,
   onRetry,
   canSend,
+  canDelete,
   coachName,
   onSkip,
+  onDeleted,
   onShortlist,
   onReplied,
 }: { email: DocketEmail; videoCount: number } & InfoProps) {
   const [replying, setReplying] = useState<ReplyTemplate | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const info = email.info;
   const pending = !info && !failed;
 
@@ -455,6 +522,11 @@ function InfoCard({
           {formatDate(email.date)}
           {info && <span className="ml-auto">Read by AI</span>}
         </p>
+        {info?.recruiting === "unsure" && (
+          <p role="note" className="mt-3 rounded-xl bg-yellow/15 px-3 py-2 text-sm font-medium text-yellow">
+            Not sure this is a recruiting email — review before acting.
+          </p>
+        )}
 
         <h2 className="mt-3 text-2xl leading-tight font-bold">
           {info?.name ? (
@@ -522,7 +594,7 @@ function InfoCard({
               </button>
             ))}
           </div>
-          <div className="mt-2 grid grid-cols-2 gap-2">
+          <div className="mt-2 grid grid-cols-3 gap-2">
             <button
               type="button"
               onClick={onShortlist}
@@ -540,6 +612,13 @@ function InfoCard({
             >
               Skip
             </button>
+            <button
+              type="button"
+              onClick={() => setDeleting(true)}
+              className="rounded-xl bg-white/10 px-3 py-2.5 text-sm font-semibold text-red active:bg-white/20"
+            >
+              Delete
+            </button>
           </div>
           {videoCount > 0 && (
             <p className="mt-3 text-center text-sm text-white/50">
@@ -549,6 +628,17 @@ function InfoCard({
         </div>
       </div>
 
+      {deleting && (
+        <DeleteSheet
+          email={email}
+          canDelete={canDelete}
+          onClose={() => setDeleting(false)}
+          onDeleted={() => {
+            setDeleting(false);
+            onDeleted();
+          }}
+        />
+      )}
       {replying && (
         <ReplySheet
           email={email}
@@ -563,6 +653,71 @@ function InfoCard({
         />
       )}
     </section>
+  );
+}
+
+// Delete: out of The Docket and into the coach's Gmail Trash, after a
+// confirmation (Gmail deletes it for good after 30 days).
+function DeleteSheet({
+  email,
+  canDelete,
+  onClose,
+  onDeleted,
+}: {
+  email: DocketEmail;
+  canDelete: boolean;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [needsReconnect, setNeedsReconnect] = useState(!canDelete);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function confirm() {
+    setError(null);
+    startTransition(async () => {
+      const result = await deleteEmailAction(email.id, email.threadId).catch(() => ({
+        ok: false as const,
+        reason: "error" as const,
+        message: "Couldn’t reach the server. Check your connection.",
+      }));
+      if (result.ok) onDeleted();
+      else if (result.reason === "reconnect") setNeedsReconnect(true);
+      else setError(result.message);
+    });
+  }
+
+  return (
+    <Sheet onClose={() => !pending && onClose()}>
+      <SheetTitle
+        title="Delete this email?"
+        subtitle={`“${email.subject}” from ${email.from} will be removed from The Docket and moved to Trash in your Gmail. Gmail deletes it for good after 30 days.`}
+      />
+      {needsReconnect ? (
+        <>
+          <p className="text-center text-sm text-muted">
+            To delete emails, Briefcase needs permission to move them to your Gmail Trash. Reconnect once and allow it.
+          </p>
+          <a
+            href="/api/auth/gmail/start"
+            className="block w-full rounded-2xl bg-accent py-3.5 text-center font-semibold text-accent-foreground"
+          >
+            Reconnect Gmail
+          </a>
+          <SheetButton onClick={onClose}>Cancel</SheetButton>
+        </>
+      ) : (
+        <>
+          {error && <p className="px-1 text-sm text-red">{error}</p>}
+          <SheetButton variant="danger" disabled={pending} onClick={confirm}>
+            {pending ? "Deleting…" : "Delete email"}
+          </SheetButton>
+          <SheetButton disabled={pending} onClick={onClose}>
+            Cancel
+          </SheetButton>
+        </>
+      )}
+    </Sheet>
   );
 }
 
@@ -796,7 +951,7 @@ function OpenElsewhere({ item }: { item: Pick<FoundLink, "platform" | "url"> }) 
 }
 
 // ⋯ menu: which account, refresh, disconnect.
-function FeedMenu({
+export function FeedMenu({
   connectedEmail,
   onRefresh,
   loading,
@@ -891,7 +1046,7 @@ function FeedMenu({
 }
 
 // Loading problems and the empty state, on the app's usual background.
-function StatePage({
+export function StatePage({
   connectedEmail,
   onRefresh,
   loading,
