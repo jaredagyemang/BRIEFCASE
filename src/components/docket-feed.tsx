@@ -260,23 +260,58 @@ function YouTubeMedia({ url, active }: { url: string; active: boolean }) {
   const box = video?.vertical ? "aspect-[9/16] h-full max-w-full" : "aspect-video w-full max-w-3xl";
   if (!video) return <OpenElsewhere item={{ platform: "youtube", url }} />;
   return (
-    <div className={`relative overflow-hidden rounded-2xl bg-white/5 ${box}`}>
-      {active ? (
-        <iframe
-          src={video.embedUrl}
-          title="YouTube video"
-          allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-          allowFullScreen
-          referrerPolicy="strict-origin-when-cross-origin"
-          className="absolute inset-0 h-full w-full"
-        />
-      ) : (
-        video.thumbnail && (
-          // eslint-disable-next-line @next/next/no-img-element -- a remote thumbnail placeholder
-          <img src={video.thumbnail} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover opacity-80" />
-        )
-      )}
+    <div className={`relative ${box}`}>
+      <div className="absolute inset-0 overflow-hidden rounded-2xl bg-white/5">
+        {active ? (
+          <iframe
+            src={video.embedUrl}
+            title="YouTube video"
+            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+            allowFullScreen
+            referrerPolicy="strict-origin-when-cross-origin"
+            className="absolute inset-0 h-full w-full"
+          />
+        ) : (
+          video.thumbnail && (
+            // eslint-disable-next-line @next/next/no-img-element -- a remote thumbnail placeholder
+            <img src={video.thumbnail} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover opacity-80" />
+          )
+        )}
+      </div>
+      {/* Mounted afresh each time this card's video starts. */}
+      {active && <UnmuteHint inside={video.vertical} />}
     </div>
+  );
+}
+
+// Videos start muted (phones only let them start by themselves that way), so
+// a small reminder fades in as each one starts and fades out again. It sits
+// below the video, or near the bottom of a tall Short, never over YouTube's
+// controls, and taps pass straight through it.
+const HINT_SHOWN_FOR = 2500;
+
+function UnmuteHint({ inside }: { inside: boolean }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const show = requestAnimationFrame(() => setVisible(true));
+    const hide = setTimeout(() => setVisible(false), HINT_SHOWN_FOR);
+    return () => {
+      cancelAnimationFrame(show);
+      clearTimeout(hide);
+    };
+  }, []);
+  return (
+    <p
+      role="status"
+      data-unmute-hint
+      className={`pointer-events-none absolute left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-3.5 py-1.5 text-sm font-medium whitespace-nowrap text-white/90 ring-1 ring-white/15 backdrop-blur-sm motion-safe:transition-opacity motion-safe:duration-500 ${
+        inside ? "bottom-16" : "top-full mt-3"
+      } ${visible ? "opacity-100" : "opacity-0"}`}
+    >
+      <span className="sr-only">Video is playing muted. </span>
+      Tap <span aria-hidden>🔇</span>
+      <span className="sr-only">the speaker button</span> to unmute
+    </p>
   );
 }
 
