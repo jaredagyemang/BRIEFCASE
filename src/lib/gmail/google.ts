@@ -15,8 +15,11 @@ const GMAIL_URL = process.env.GMAIL_API_URL ?? "https://gmail.googleapis.com/gma
 export const STATE_COOKIE = "gmail_oauth_state";
 
 export const GMAIL_READONLY = "https://www.googleapis.com/auth/gmail.readonly";
-// Read-only Gmail, plus the address of the account being connected.
-const SCOPES = ["openid", "email", GMAIL_READONLY];
+// Sending replies from the Info card (send only: it can't read, change or
+// delete anything by itself).
+export const GMAIL_SEND = "https://www.googleapis.com/auth/gmail.send";
+// Read-only Gmail, sending replies, and the address of the account.
+const SCOPES = ["openid", "email", GMAIL_READONLY, GMAIL_SEND];
 
 function credentials() {
   const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -120,13 +123,20 @@ export function emailFromIdToken(idToken: string | undefined) {
 // --- Gmail -------------------------------------------------------------------
 
 export class GmailUnauthorizedError extends Error {}
+// The connection doesn't include a permission this needs (e.g. sending).
+export class GmailScopeError extends Error {}
 
-async function gmail<T>(path: string, accessToken: string): Promise<T> {
+async function gmail<T>(path: string, accessToken: string, body?: unknown): Promise<T> {
   const res = await fetch(`${GMAIL_URL}${path}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+    method: body ? "POST" : "GET",
+    headers: { Authorization: `Bearer ${accessToken}`, ...(body ? { "Content-Type": "application/json" } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(20_000),
   });
   if (res.status === 401) throw new GmailUnauthorizedError("Gmail rejected the access token.");
+  if (res.status === 403 && /insufficient|scope|permission/i.test(await res.clone().text().catch(() => ""))) {
+    throw new GmailScopeError("This Gmail connection can't do that. Reconnect Gmail.");
+  }
   if (!res.ok) {
     console.error("Gmail request failed", path.split("?")[0], res.status, await res.text().catch(() => ""));
     throw new Error("Couldn't read Gmail right now. Try again in a moment.");
@@ -150,4 +160,9 @@ export async function listMessageIds(accessToken: string, query: string, max: nu
 
 export function getMessage(accessToken: string, id: string) {
   return gmail<GmailMessage>(`/users/me/messages/${encodeURIComponent(id)}?format=full`, accessToken);
+}
+
+// Sends a raw RFC 2822 message (base64url), as a reply in the given thread.
+export function sendMessage(accessToken: string, raw: string, threadId: string) {
+  return gmail<{ id: string; threadId: string }>("/users/me/messages/send", accessToken, { raw, threadId });
 }

@@ -147,3 +147,15 @@ export function googleDocPreview(raw: string) {
   const m = raw.match(/^https?:\/\/docs\.google\.com\/document\/(?:u\/\d+\/)?d\/([\w-]+)/);
   return m ? `https://docs.google.com/document/d/${m[1]}/preview` : null;
 }
+
+// A player's films, with the same YouTube video only once (e.g. a plain link
+// and a timestamped one).
+export function uniqueMedia(links: FoundLink[]) {
+  const seen = new Set<string>();
+  return links.filter((link) => {
+    const key = link.platform === "youtube" ? (youtubeVideo(link.url)?.id ?? link.url) : link.url;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}

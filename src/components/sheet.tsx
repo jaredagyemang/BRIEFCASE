@@ -21,7 +21,7 @@ export function Sheet({ children, onClose }: { children: React.ReactNode; onClos
       <div
         role="dialog"
         aria-modal="true"
-        className="relative w-full max-w-md space-y-3 rounded-t-3xl bg-surface p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl sm:rounded-3xl"
+        className="relative w-full max-w-md space-y-3 rounded-t-3xl bg-surface p-5 text-foreground pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl sm:rounded-3xl"
       >
         <div className="mx-auto mb-2 h-1.5 w-10 rounded-full bg-border sm:hidden" />
         {children}
