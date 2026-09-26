@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { signIn } from "./actions";
+import { BrandLogo } from "@/components/brand-logo";
 import { inputClass } from "@/components/ui";
 
 export default function LoginPage() {
@@ -10,9 +11,10 @@ export default function LoginPage() {
   return (
     <div className="mx-auto flex min-h-[70vh] max-w-sm flex-col justify-center">
       <div className="text-center">
-        <div className="text-5xl">💼</div>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight">Briefcase</h1>
-        <p className="mt-1 text-muted">Sign in with your staff login.</p>
+        <h1>
+          <BrandLogo variant="full" className="mx-auto w-60" />
+        </h1>
+        <p className="mt-4 text-muted">Sign in with your staff login.</p>
       </div>
 
       <form action={formAction} className="mt-8 space-y-3">

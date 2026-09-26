@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { BrandLogo } from "@/components/brand-logo";
 import { MODES, modeIndexFor } from "@/lib/modes";
 import { finishModeSlide, startModeSlide } from "@/lib/mode-slide";
 
@@ -140,8 +141,8 @@ export function AppNav() {
         className="z-20 flex-none border-b border-border bg-background"
       >
         <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4">
-          <Link href="/" className="text-lg font-semibold tracking-tight">
-            💼 Briefcase
+          <Link href="/" aria-label="Briefcase home">
+            <BrandLogo variant="compact" />
           </Link>
           <span className="text-sm font-medium text-muted">{MODES[shown].caption}</span>
         </div>
