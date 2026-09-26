@@ -83,3 +83,67 @@ export function extractLinks(text: string): FoundLink[] {
   }
   return [...found.values()];
 }
+
+// --- Playing links inside the app -------------------------------------------
+
+export type YouTubeVideo = {
+  id: string | null;
+  embedUrl: string;
+  thumbnail: string | null;
+  // Shorts are vertical (9:16); everything else is 16:9.
+  vertical: boolean;
+};
+
+function seconds(t: string | null) {
+  if (!t) return 0;
+  if (/^\d+$/.test(t)) return Number(t);
+  const m = t.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/);
+  return m ? Number(m[1] ?? 0) * 3600 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0) : 0;
+}
+
+// The embeddable player for a YouTube link (privacy-enhanced domain, plays
+// inline on iPhones, starts muted so it can start by itself), or null.
+export function youtubeVideo(raw: string): YouTubeVideo | null {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return null;
+  }
+  const host = url.hostname.toLowerCase();
+  let id: string | null = null;
+  let list: string | null = url.searchParams.get("list");
+  let vertical = false;
+  if (host === "youtu.be") id = url.pathname.slice(1).split("/")[0];
+  else if (hostIs(host, "youtube.com")) {
+    if (url.pathname === "/watch") id = url.searchParams.get("v");
+    else {
+      const m = url.pathname.match(/^\/(shorts|live|embed)\/([\w-]+)/);
+      if (m) {
+        id = m[2];
+        vertical = m[1] === "shorts";
+      }
+    }
+  } else return null;
+  if (id && !/^[\w-]{6,20}$/.test(id)) id = null;
+  if (list && !/^[\w-]+$/.test(list)) list = null;
+  if (!id && !list) return null;
+
+  const params = new URLSearchParams({ autoplay: "1", mute: "1", playsinline: "1", rel: "0" });
+  const start = seconds(url.searchParams.get("t") ?? url.searchParams.get("start"));
+  if (start) params.set("start", String(start));
+  if (list) params.set("list", list);
+  const path = id ? id : "videoseries";
+  return {
+    id,
+    embedUrl: `https://www.youtube-nocookie.com/embed/${path}?${params}`,
+    thumbnail: id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : null,
+    vertical,
+  };
+}
+
+// Google's read-only preview of a Doc (works when the viewer can open it).
+export function googleDocPreview(raw: string) {
+  const m = raw.match(/^https?:\/\/docs\.google\.com\/document\/(?:u\/\d+\/)?d\/([\w-]+)/);
+  return m ? `https://docs.google.com/document/d/${m[1]}/preview` : null;
+}
