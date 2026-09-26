@@ -109,6 +109,12 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
           📷 Scan roster
         </Link>
         <Link
+          href={`${eventPath(eventId)}/scan?source=link`}
+          className="flex-1 rounded-2xl bg-surface-muted py-3 text-center text-sm font-semibold"
+        >
+          🔗 Paste link
+        </Link>
+        <Link
           href={`${eventPath(eventId)}/players/new`}
           className="flex-1 rounded-2xl bg-accent py-3 text-center text-sm font-semibold text-accent-foreground"
         >

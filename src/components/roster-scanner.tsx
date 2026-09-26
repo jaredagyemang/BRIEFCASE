@@ -7,7 +7,9 @@ import {
   checkRosterDuplicates,
   saveRosterPlayers,
   scanRoster,
+  scanRosterLink,
   type RosterRow,
+  type ScanResult,
 } from "@/app/events/scan-actions";
 import type { PlayerDuplicate } from "@/app/players/actions";
 import { duplicateKey } from "@/lib/duplicates";
@@ -44,6 +46,19 @@ type Item = {
 
 type Stage = "capture" | "scanning" | "review";
 
+// How the roster comes in: a photo of a paper roster, or a link to a roster
+// web page / Google Doc. Everything after reading it is the same.
+export type RosterSource = "photo" | "link";
+
+// "https://www.example.com/team/roster" → "example.com"
+function siteName(link: string) {
+  try {
+    return new URL(/^https?:\/\//i.test(link) ? link : `https://${link}`).hostname.replace(/^www\./, "");
+  } catch {
+    return link;
+  }
+}
+
 // What happens to a row on save.
 type Choice =
   | { kind: "existing"; playerId: string } // add this existing player to the event
@@ -75,9 +90,21 @@ const emptyRow = (club_team: string): RosterRow => ({
   gpa_note: null,
 });
 
-export function RosterScanner({ eventId, eventName }: { eventId: string; eventName: string }) {
+export function RosterScanner({
+  eventId,
+  eventName,
+  initialSource = "photo",
+}: {
+  eventId: string;
+  eventName: string;
+  initialSource?: RosterSource;
+}) {
   const router = useRouter();
+  const [source, setSource] = useState<RosterSource>(initialSource);
   const [stage, setStage] = useState<Stage>("capture");
+  const [link, setLink] = useState("");
+  // The link the rows on the review screen came from.
+  const [readLink, setReadLink] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [showPhoto, setShowPhoto] = useState(false);
@@ -107,12 +134,42 @@ export function RosterScanner({ eventId, eventName }: { eventId: string; eventNa
 
     const form = new FormData();
     form.append("photo", await preparePhoto(file));
-    let result: Awaited<ReturnType<typeof scanRoster>>;
+    let result: ScanResult;
     try {
       result = await scanRoster(eventId, form);
     } catch {
       result = { ok: false, error: "Couldn't reach the server. Check your connection and try again." };
     }
+    showResult(result);
+  }
+
+  async function onLink(e: React.FormEvent) {
+    e.preventDefault();
+    const pasted = link.trim();
+    if (!pasted) {
+      setError("Paste a link to the roster first.");
+      return;
+    }
+    setError(null);
+    setStage("scanning");
+    setReadLink(pasted);
+    if (photoUrl) URL.revokeObjectURL(photoUrl);
+    setPhotoUrl(null);
+    let result: ScanResult;
+    try {
+      result = await scanRosterLink(eventId, pasted);
+    } catch {
+      result = { ok: false, error: "Couldn't reach the server. Check your connection and try again." };
+    }
+    showResult(result);
+  }
+
+  function switchSource(next: RosterSource) {
+    setSource(next);
+    setError(null);
+  }
+
+  function showResult(result: ScanResult) {
     if (!result.ok) {
       setError(result.error);
       setStage("capture");
@@ -247,9 +304,20 @@ export function RosterScanner({ eventId, eventName }: { eventId: string; eventNa
   if (stage !== "review") {
     return (
       <div>
-        <Header eventId={eventId} eventName={eventName} />
+        <Header eventId={eventId} eventName={eventName} source={source} />
         <div className="mt-6 rounded-3xl bg-surface p-6 text-center">
-          {stage === "scanning" ? (
+          {stage === "scanning" && source === "link" ? (
+            <>
+              <p className="text-5xl">🔗</p>
+              <p className="mt-3 truncate text-sm text-muted">{readLink && siteName(readLink)}</p>
+              <p className="mt-3 flex items-center justify-center gap-2 font-semibold">
+                <Spinner /> Reading roster…
+              </p>
+              <p className="mt-1 text-sm text-muted">
+                Opening the page and finding the players. This can take up to a minute.
+              </p>
+            </>
+          ) : stage === "scanning" ? (
             <>
               {photoUrl && (
                 // eslint-disable-next-line @next/next/no-img-element -- local preview of the photo just taken
@@ -259,6 +327,51 @@ export function RosterScanner({ eventId, eventName }: { eventId: string; eventNa
                 <Spinner /> Reading roster…
               </p>
               <p className="mt-1 text-sm text-muted">This usually takes a few seconds.</p>
+            </>
+          ) : source === "link" ? (
+            <>
+              <p className="text-5xl">🔗</p>
+              <p className="mt-3 font-semibold">Paste a roster link</p>
+              <p className="mt-1 text-sm text-muted">
+                A team roster web page, Google Doc or Google Sheet. It needs to be public (no login). You&apos;ll review
+                every player before anything is saved.
+              </p>
+              {error && (
+                <p role="alert" className="mt-4 rounded-2xl bg-red/10 px-4 py-3 text-left text-sm text-red">
+                  {error}
+                </p>
+              )}
+              <form onSubmit={onLink} className="mt-5 space-y-2">
+                <input
+                  value={link}
+                  onChange={(e) => setLink(e.target.value)}
+                  aria-label="Roster link"
+                  placeholder="https://…"
+                  // Text, not type="url", so an address without https:// is
+                  // accepted (the server adds it).
+                  type="text"
+                  inputMode="url"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  enterKeyHint="go"
+                  className={`${cellClass} w-full py-3`}
+                />
+                <button
+                  type="submit"
+                  disabled={!link.trim()}
+                  className="w-full rounded-2xl bg-accent py-3.5 font-semibold text-accent-foreground disabled:opacity-50"
+                >
+                  Read roster
+                </button>
+              </form>
+              <button
+                type="button"
+                onClick={() => switchSource("photo")}
+                className="mt-4 text-sm font-semibold text-accent-ink"
+              >
+                📷 Use a photo instead
+              </button>
             </>
           ) : (
             <>
@@ -282,6 +395,13 @@ export function RosterScanner({ eventId, eventName }: { eventId: string; eventNa
                 className="mt-2 w-full rounded-2xl bg-surface-muted py-3.5 font-semibold"
               >
                 Choose from photos
+              </button>
+              <button
+                type="button"
+                onClick={() => switchSource("link")}
+                className="mt-4 text-sm font-semibold text-accent-ink"
+              >
+                🔗 Paste a link instead
               </button>
             </>
           )}
@@ -315,11 +435,22 @@ export function RosterScanner({ eventId, eventName }: { eventId: string; eventNa
 
   return (
     <div className="pb-44 sm:pb-24">
-      <Header eventId={eventId} eventName={eventName} />
+      <Header eventId={eventId} eventName={eventName} source={source} />
 
       <div className="mt-4 rounded-3xl bg-surface p-4">
         <div className="flex items-center gap-3">
-          {photoUrl && (
+          {source === "link" && readLink && (
+            <a
+              href={/^https?:\/\//i.test(readLink) ? readLink : `https://${readLink}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Open the roster page"
+              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-2xl"
+            >
+              🔗
+            </a>
+          )}
+          {source === "photo" && photoUrl && (
             <button type="button" onClick={() => setShowPhoto((s) => !s)} aria-label="Show roster photo">
               {/* eslint-disable-next-line @next/next/no-img-element -- local preview of the photo just taken */}
               <img src={photoUrl} alt="" className="h-14 w-14 rounded-xl object-cover" />
@@ -329,10 +460,13 @@ export function RosterScanner({ eventId, eventName }: { eventId: string; eventNa
             <p className="font-semibold">
               {items.length} player{items.length === 1 ? "" : "s"} found
             </p>
-            <p className="text-sm text-muted">Check each row, fix anything misread, and remove extras.</p>
+            <p className="text-sm text-muted">
+              {source === "link" && readLink && <span className="font-medium">From {siteName(readLink)}. </span>}
+              Check each row, fix anything misread, and remove extras.
+            </p>
           </div>
         </div>
-        {showPhoto && photoUrl && (
+        {source === "photo" && showPhoto && photoUrl && (
           // eslint-disable-next-line @next/next/no-img-element -- local preview of the photo just taken
           <img src={photoUrl} alt="Roster photo" className="mt-3 w-full rounded-2xl" />
         )}
@@ -447,7 +581,9 @@ export function RosterScanner({ eventId, eventName }: { eventId: string; eventNa
                 <p className="mt-2 px-1 text-sm text-yellow-700 dark:text-yellow">{it.row.gpa_note}</p>
               )}
               {it.row.unclear && !it.error && (
-                <p className="mt-2 px-1 text-sm text-yellow-700 dark:text-yellow">Hard to read. Check this row.</p>
+                <p className="mt-2 px-1 text-sm text-yellow-700 dark:text-yellow">
+                  {source === "link" ? "Not sure about this row. Check it." : "Hard to read. Check this row."}
+                </p>
               )}
               {earlier && (
                 <p className="mt-2 px-1 text-sm text-yellow-700 dark:text-yellow">
@@ -455,7 +591,7 @@ export function RosterScanner({ eventId, eventName }: { eventId: string; eventNa
                 </p>
               )}
               {it.matches.length > 0 && (
-                <fieldset className="mt-2 rounded-xl bg-yellow/10 p-3">
+                <fieldset className="mt-2 min-w-0 rounded-xl bg-yellow/10 p-3">
                   <legend className="sr-only">Row {index + 1}: already in Briefcase</legend>
                   <p className="text-sm font-semibold">⚠️ Already in Briefcase</p>
                   <div className="mt-1 space-y-1.5">
@@ -584,13 +720,13 @@ function ApplyToAll({
   );
 }
 
-function Header({ eventId, eventName }: { eventId: string; eventName: string }) {
+function Header({ eventId, eventName, source }: { eventId: string; eventName: string; source: RosterSource }) {
   return (
     <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
       <Link href={eventPath(eventId)} className="truncate text-accent-ink">
         ‹ {eventName}
       </Link>
-      <h1 className="text-lg font-semibold">Scan roster</h1>
+      <h1 className="text-lg font-semibold">{source === "link" ? "Roster from link" : "Scan roster"}</h1>
       <span />
     </div>
   );
