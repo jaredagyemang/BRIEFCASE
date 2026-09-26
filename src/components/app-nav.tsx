@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { MODES, modeIndexFor } from "@/lib/modes";
 import { finishModeSlide, startModeSlide } from "@/lib/mode-slide";
 
@@ -40,20 +40,11 @@ const ROOTS = MODES.map((m) => m.root).join("\n");
 const readDestinations = () => MODES.map((_, i) => destination(i)).join("\n");
 const subscribeNoop = () => () => {};
 
-// A page swipe only switches modes when it didn't start on something that
-// scrolls sideways itself (like the Active / Previous slider) or on a control.
-function swipeStartsOnScroller(el: Element | null) {
-  for (let node = el; node && node !== document.body; node = node.parentElement) {
-    const { overflowX } = getComputedStyle(node);
-    if ((overflowX === "auto" || overflowX === "scroll") && node.scrollWidth > node.clientWidth + 1) return true;
-  }
-  return false;
-}
-
 // Top-level navigation: the three compartments of the briefcase (Profile,
 // Events, The Docket) on a stitched leather rail. A cream divider card sits in
-// the open compartment; tap a compartment, drag the card, or swipe the page
-// sideways to flip to the next one.
+// the open compartment; tap a compartment, or drag the card along the rail, to
+// flip to another one. Swiping elsewhere on the page doesn't switch modes:
+// sideways swipes belong to the screens themselves (e.g. The Docket).
 export function AppNav() {
   const pathname = usePathname();
   const router = useRouter();
@@ -97,51 +88,6 @@ export function AppNav() {
   // The new mode's page has been committed: slide it in before it's painted.
   useLayoutEffect(() => {
     finishModeSlide(pathname);
-  }, [pathname]);
-
-  const onPageSwipe = useEffectEvent((direction: 1 | -1) => {
-    const target = clamp(current + direction);
-    if (target !== current) go(target);
-  });
-
-  useEffect(() => {
-    if (pathname.startsWith("/login")) return;
-    let start: { x: number; y: number; time: number } | null = null;
-
-    function onStart(e: TouchEvent) {
-      start = null;
-      if (e.touches.length !== 1) return;
-      const touch = e.touches[0];
-      // Leave the screen edges to the browser's own back/forward swipe.
-      if (touch.clientX < 24 || touch.clientX > window.innerWidth - 24) return;
-      const target = e.target instanceof Element ? e.target : null;
-      if (
-        target?.closest('nav[aria-label="Modes"], input, textarea, select, audio, [contenteditable], [role=dialog]') ||
-        document.querySelector("[role=dialog]") ||
-        swipeStartsOnScroller(target)
-      ) {
-        return;
-      }
-      start = { x: touch.clientX, y: touch.clientY, time: Date.now() };
-    }
-
-    function onEnd(e: TouchEvent) {
-      if (!start) return;
-      const touch = e.changedTouches[0];
-      const dx = touch.clientX - start.x;
-      const dy = touch.clientY - start.y;
-      if (Math.abs(dx) > 64 && Math.abs(dx) > 2 * Math.abs(dy) && Date.now() - start.time < 700) {
-        onPageSwipe(dx < 0 ? 1 : -1);
-      }
-      start = null;
-    }
-
-    document.addEventListener("touchstart", onStart, { passive: true });
-    document.addEventListener("touchend", onEnd, { passive: true });
-    return () => {
-      document.removeEventListener("touchstart", onStart);
-      document.removeEventListener("touchend", onEnd);
-    };
   }, [pathname]);
 
   if (pathname.startsWith("/login")) return null;
