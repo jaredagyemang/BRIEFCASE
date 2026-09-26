@@ -14,26 +14,7 @@ import {
 import type { PlayerDuplicate } from "@/app/players/actions";
 import { duplicateKey } from "@/lib/duplicates";
 import { eventPath } from "@/lib/events";
-
-// Claude reads images up to 2576px on the long edge; shrinking phone photos
-// to that keeps uploads fast on event Wi-Fi without losing detail.
-const MAX_EDGE = 2576;
-
-async function preparePhoto(file: File): Promise<Blob> {
-  try {
-    const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
-    const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    bitmap.close();
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
-    return blob ?? file;
-  } catch {
-    return file; // Couldn't decode here; let the server decide.
-  }
-}
+import { preparePhoto } from "@/lib/prepare-photo";
 
 type Item = {
   id: number;

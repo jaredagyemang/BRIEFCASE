@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { EventStatusButton } from "@/components/event-status-button";
+import { ExportNotesLink } from "@/components/export-notes-link";
 import { SearchBox } from "@/components/search-box";
 import { StatusPill } from "@/components/status-pill";
 import { describePlayer, duplicateIds } from "@/lib/duplicates";
@@ -93,30 +94,39 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
 
       <div className="mt-4">
         <h1 className="text-2xl font-bold tracking-tight">{event.name}</h1>
-        <p className="mt-0.5 text-muted">
-          {formatEventDate(event.event_date)} · {everyone.length} player{everyone.length === 1 ? "" : "s"}
-          {event.status === "closed" && (
-            <span className="ml-2 rounded-full bg-surface-muted px-2 py-0.5 text-xs font-semibold">Closed</span>
-          )}
-        </p>
+        <div className="mt-0.5 flex items-baseline justify-between gap-3">
+          <p className="min-w-0 text-muted">
+            {formatEventDate(event.event_date)} · {everyone.length} player{everyone.length === 1 ? "" : "s"}
+            {event.status === "closed" && (
+              <span className="ml-2 rounded-full bg-surface-muted px-2 py-0.5 text-xs font-semibold">Closed</span>
+            )}
+          </p>
+          <ExportNotesLink href={`${eventPath(eventId)}/notes-export`} />
+        </div>
       </div>
 
-      <div className="mt-4 flex gap-2">
+      <div className="mt-4 grid grid-cols-2 gap-2">
         <Link
           href={`${eventPath(eventId)}/scan`}
-          className="flex-1 rounded-2xl bg-surface-muted py-3 text-center text-sm font-semibold"
+          className="rounded-2xl bg-surface-muted py-3 text-center text-sm font-semibold"
         >
           📷 Scan roster
         </Link>
         <Link
           href={`${eventPath(eventId)}/scan?source=link`}
-          className="flex-1 rounded-2xl bg-surface-muted py-3 text-center text-sm font-semibold"
+          className="rounded-2xl bg-surface-muted py-3 text-center text-sm font-semibold"
         >
           🔗 Paste link
         </Link>
         <Link
+          href={`${eventPath(eventId)}/scan-notes`}
+          className="rounded-2xl bg-surface-muted py-3 text-center text-sm font-semibold"
+        >
+          ✍️ Scan notes
+        </Link>
+        <Link
           href={`${eventPath(eventId)}/players/new`}
-          className="flex-1 rounded-2xl bg-accent py-3 text-center text-sm font-semibold text-accent-foreground"
+          className="rounded-2xl bg-accent py-3 text-center text-sm font-semibold text-accent-foreground"
         >
           + Add player
         </Link>

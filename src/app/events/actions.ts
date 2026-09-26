@@ -95,13 +95,16 @@ export async function deleteEvent(
   goToEvents = false,
 ): Promise<{ error: string } | undefined> {
   const supabase = await createAuthedClient();
-  const { data: audioPaths, error } = await supabase.rpc("delete_event", { target_event_id: eventId });
+  const { data, error } = await supabase.rpc("delete_event", { target_event_id: eventId });
+  const files = data as { bucket: string; path: string }[] | null;
   if (error) return { error: "Couldn't delete the event. Try again." };
 
   // The notes are gone either way; a leftover file is only wasted storage.
-  if (audioPaths?.length) {
-    const { error: removeError } = await supabase.storage.from("voice-notes").remove(audioPaths);
-    if (removeError) console.error("Couldn't remove voice note files for deleted event", eventId, removeError);
+  for (const bucket of ["voice-notes", "note-photos"] as const) {
+    const paths = (files ?? []).filter((f) => f.bucket === bucket).map((f) => f.path);
+    if (!paths.length) continue;
+    const { error: removeError } = await supabase.storage.from(bucket).remove(paths);
+    if (removeError) console.error(`Couldn't remove ${bucket} files for deleted event`, eventId, removeError);
   }
 
   revalidatePath("/events", "layout");

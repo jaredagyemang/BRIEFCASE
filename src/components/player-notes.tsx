@@ -8,7 +8,10 @@ import {
   updateNote,
   uploadVoiceNote,
 } from "@/app/players/notes-actions";
+import { discardNotePhotos, readSingleNote, saveScannedNotes } from "@/app/events/note-scan-actions";
+import { PhotoThumb } from "@/components/photo-viewer";
 import { Sheet, SheetButton, SheetTitle } from "@/components/sheet";
+import { preparePhoto } from "@/lib/prepare-photo";
 import { inputClass } from "@/components/ui";
 
 export type NoteItem = {
@@ -17,6 +20,8 @@ export type NoteItem = {
   text: string | null;
   audioUrl: string | null;
   isVoice: boolean;
+  // A handwritten note's photo (a short-lived link), or null.
+  photoUrl: string | null;
   author: string | null;
   when: string;
   // Whether the signed-in user may edit/delete it (they wrote it, or it has
@@ -44,6 +49,17 @@ function formatDuration(seconds: number) {
 // A recording that hasn't made it to the server yet (kept so it's never lost).
 type PendingRecording = { blob: Blob; url: string; error: string | null };
 
+// A photo of handwritten notes being typed up, then checked before saving.
+type Scan = {
+  file: File;
+  url: string;
+  status: "reading" | "draft" | "error";
+  photoPath?: string;
+  text: string;
+  hardToRead: boolean;
+  error?: string;
+};
+
 export function PlayerNotes({ eventId, playerId, notes }: { eventId: string; playerId: string; notes: NoteItem[] }) {
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -65,13 +81,17 @@ export function PlayerNotes({ eventId, playerId, notes }: { eventId: string; pla
   const [confirmDelete, setConfirmDelete] = useState<NoteItem | null>(null);
   const [savingEdit, startSavingEdit] = useTransition();
 
+  const [scan, setScan] = useState<Scan | null>(null);
+  const [savingScan, startSavingScan] = useTransition();
+  const scanInputRef = useRef<HTMLInputElement>(null);
+
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const cancelledRef = useRef(false);
 
 
   // Warn before leaving while a recording could be lost.
-  const unsaved = recording || uploading || pending !== null;
+  const unsaved = recording || uploading || pending !== null || scan !== null;
   useEffect(() => {
     if (!unsaved) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => e.preventDefault();
@@ -86,6 +106,62 @@ export function PlayerNotes({ eventId, playerId, notes }: { eventId: string; pla
       if (result.ok) setText("");
       else setError(result.error);
     });
+  }
+
+  async function readScan(file: File) {
+    setError(null);
+    setScan((current) => {
+      if (current && current.url !== "" && current.file !== file) URL.revokeObjectURL(current.url);
+      return {
+        file,
+        url: current?.file === file ? current.url : URL.createObjectURL(file),
+        status: "reading",
+        text: "",
+        hardToRead: false,
+      };
+    });
+    const form = new FormData();
+    form.append("photo", await preparePhoto(file));
+    let result: Awaited<ReturnType<typeof readSingleNote>>;
+    try {
+      result = await readSingleNote(eventId, playerId, form);
+    } catch {
+      result = { ok: false, error: "Couldn't reach the server. Check your connection and try again." };
+    }
+    setScan((current) =>
+      !current || current.file !== file
+        ? current
+        : result.ok
+          ? { ...current, status: "draft", photoPath: result.photoPath, text: result.text, hardToRead: result.hardToRead }
+          : { ...current, status: "error", error: result.error },
+    );
+  }
+
+  function saveScan() {
+    if (!scan?.photoPath) return;
+    const { photoPath, text: scanned, url } = scan;
+    setScan({ ...scan, error: undefined });
+    startSavingScan(async () => {
+      let result: Awaited<ReturnType<typeof saveScannedNotes>>;
+      try {
+        result = await saveScannedNotes(eventId, [{ playerId, text: scanned, photoPath }]);
+      } catch {
+        result = { ok: false, error: "Couldn't reach the server. Your note is still here; try again." };
+      }
+      if (result.ok) {
+        URL.revokeObjectURL(url);
+        setScan(null);
+      } else {
+        setScan((current) => current && { ...current, error: result.rowErrors?.[0] ?? result.error });
+      }
+    });
+  }
+
+  function discardScan() {
+    if (!scan) return;
+    if (scan.photoPath) void discardNotePhotos(eventId, [scan.photoPath]);
+    URL.revokeObjectURL(scan.url);
+    setScan(null);
   }
 
   async function startRecording() {
@@ -258,20 +334,42 @@ export function PlayerNotes({ eventId, playerId, notes }: { eventId: string; pla
               className="w-full resize-none bg-transparent px-2 py-1.5 text-base outline-none placeholder:text-muted"
             />
             <div className="flex items-center justify-between gap-2">
-              {canRecord ? (
+              <div className="flex gap-2">
+                {canRecord && (
+                  <button
+                    type="button"
+                    onClick={startRecording}
+                    disabled={uploading || pending !== null}
+                    aria-label="Record voice note"
+                    className="flex items-center gap-2 rounded-full bg-surface-muted py-2 pr-4 pl-3 text-sm font-semibold transition active:scale-95 disabled:opacity-50"
+                  >
+                    <span className="text-lg leading-none">🎙️</span>
+                    Record
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={startRecording}
-                  disabled={uploading || pending !== null}
-                  aria-label="Record voice note"
+                  onClick={() => scanInputRef.current?.click()}
+                  disabled={scan !== null}
+                  aria-label="Scan handwritten note"
                   className="flex items-center gap-2 rounded-full bg-surface-muted py-2 pr-4 pl-3 text-sm font-semibold transition active:scale-95 disabled:opacity-50"
                 >
-                  <span className="text-lg leading-none">🎙️</span>
-                  Record
+                  <span className="text-lg leading-none">✍️</span>
+                  Scan
                 </button>
-              ) : (
-                <span />
-              )}
+                {/* No capture attribute, so phones offer the camera or the photo library. */}
+                <input
+                  ref={scanInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (file) void readScan(file);
+                  }}
+                />
+              </div>
               <button
                 type="button"
                 onClick={saveText}
@@ -286,6 +384,73 @@ export function PlayerNotes({ eventId, playerId, notes }: { eventId: string; pla
       </div>
 
       {error && <p className="mt-2 px-1 text-sm text-red">{error}</p>}
+
+      {scan && (
+        <div className="mt-3 rounded-2xl bg-surface p-3 ring-2 ring-accent/40" aria-label="Scanned note">
+          <div className="flex items-start gap-3">
+            <PhotoThumb src={scan.url} alt="Handwritten note" className="h-20 w-16" />
+            <div className="min-w-0 flex-1 pt-1">
+              {scan.status === "reading" ? (
+                <p className="flex items-center gap-2 font-medium">
+                  <Spinner /> Reading handwriting…
+                </p>
+              ) : scan.status === "error" ? (
+                <p className="text-sm text-red">{scan.error}</p>
+              ) : (
+                <p className="text-sm text-muted">Check the text against your handwriting, then save.</p>
+              )}
+            </div>
+          </div>
+          {scan.status === "draft" && (
+            <>
+              <textarea
+                value={scan.text}
+                onChange={(e) => setScan({ ...scan, text: e.target.value, error: undefined })}
+                rows={Math.min(12, Math.max(3, scan.text.split("\n").length + 1))}
+                maxLength={5000}
+                aria-label="Scanned note text"
+                className={`${inputClass} mt-3 resize-y leading-relaxed`}
+              />
+              {scan.hardToRead && !scan.error && (
+                <p className="mt-1 px-1 text-sm text-yellow-700 dark:text-yellow">
+                  Some words were hard to read (marked [?]). Check against the photo.
+                </p>
+              )}
+              {scan.error && <p className="mt-1 px-1 text-sm text-red">{scan.error}</p>}
+            </>
+          )}
+          {scan.status !== "reading" && (
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={discardScan}
+                disabled={savingScan}
+                className="rounded-full bg-surface-muted px-4 py-2 text-sm font-semibold disabled:opacity-60"
+              >
+                Discard
+              </button>
+              {scan.status === "error" ? (
+                <button
+                  type="button"
+                  onClick={() => readScan(scan.file)}
+                  className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground"
+                >
+                  Try again
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={saveScan}
+                  disabled={savingScan || !scan.text.trim()}
+                  className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-40"
+                >
+                  {savingScan ? "Saving…" : "Save scanned note"}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {pending && (
         <div className="mt-3 rounded-2xl bg-surface p-4">
@@ -346,6 +511,9 @@ export function PlayerNotes({ eventId, playerId, notes }: { eventId: string; pla
                 {note.audioUrl && (
                   <audio src={note.audioUrl} controls preload="none" className="mt-2 h-9 w-full" />
                 )}
+                {note.photoUrl && (
+                  <PhotoThumb src={note.photoUrl} alt="Handwritten note" className="mt-2 block h-16 w-12" />
+                )}
                 {editError && <p className="mt-2 px-1 text-sm text-red">{editError}</p>}
                 <div className="mt-3 flex items-center gap-2">
                   <button
@@ -402,9 +570,12 @@ export function PlayerNotes({ eventId, playerId, notes }: { eventId: string; pla
                 {note.audioUrl && (
                   <audio src={note.audioUrl} controls preload="none" className="mt-2 h-9 w-full" />
                 )}
+                {note.photoUrl && (
+                  <PhotoThumb src={note.photoUrl} alt="Handwritten note" className="mt-2 block h-16 w-12" />
+                )}
                 <div className="mt-1.5 flex items-center justify-between gap-2 text-xs text-muted">
                   <span>
-                    {note.isVoice ? "🎙️ Voice · " : ""}
+                    {note.isVoice ? "🎙️ Voice · " : note.photoUrl ? "✍️ Handwritten · " : ""}
                     {note.author ?? "Shared login"} · {note.when}
                   </span>
                   {note.canEdit && !transcribing.has(note.id) && (

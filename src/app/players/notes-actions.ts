@@ -122,6 +122,7 @@ export async function transcribeNote(noteId: string): Promise<NoteResult<{ text:
 type OwnedNote = {
   player_id: string;
   raw_audio_url: string | null;
+  note_image_url: string | null;
   traffic_light_rating: string | null;
   rated_by: string | null;
 };
@@ -135,7 +136,7 @@ async function loadEditableNote(noteId: string) {
 
   const { data: note } = await supabase
     .from("evaluations")
-    .select("player_id, raw_audio_url, traffic_light_rating, rated_by")
+    .select("player_id, raw_audio_url, note_image_url, traffic_light_rating, rated_by")
     .eq("id", noteId)
     .maybeSingle<OwnedNote>();
 
@@ -171,7 +172,8 @@ export async function updateNote(noteId: string, text: string): Promise<NoteResu
   return { ok: true };
 }
 
-// Removes a note and, for voice notes, its recording.
+// Removes a note and, for voice notes, its recording. A handwritten note's
+// photo is removed too, unless another note from the same page still uses it.
 export async function deleteNote(noteId: string): Promise<NoteResult> {
   const { supabase, note, error } = await loadEditableNote(noteId);
   if (!note) return { ok: false, error };
@@ -188,6 +190,16 @@ export async function deleteNote(noteId: string): Promise<NoteResult> {
   if (note.raw_audio_url) {
     const { error: removeError } = await supabase.storage.from(BUCKET).remove([note.raw_audio_url]);
     if (removeError) console.error("Couldn't remove voice note file", note.raw_audio_url, removeError);
+  }
+  if (note.note_image_url) {
+    const { count } = await supabase
+      .from("evaluations")
+      .select("id", { count: "exact", head: true })
+      .eq("note_image_url", note.note_image_url);
+    if (count === 0) {
+      const { error: removeError } = await supabase.storage.from("note-photos").remove([note.note_image_url]);
+      if (removeError) console.error("Couldn't remove note photo", note.note_image_url, removeError);
+    }
   }
 
   revalidatePath("/events", "layout");
