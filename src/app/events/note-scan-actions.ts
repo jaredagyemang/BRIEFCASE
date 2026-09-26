@@ -105,21 +105,35 @@ export async function saveScannedNotes(
   let savedIds: string[] = [];
   if (assigned.length) {
     const { data, error } = await supabase.from("evaluations").insert(assigned).select("id");
-    if (error) return { ok: false, error: "Couldn't save the notes. Check your connection and try again." };
+    if (error) {
+      console.error("Saving scanned notes failed", error);
+      return { ok: false, error: "Couldn't save the notes. Check your connection and try again." };
+    }
     savedIds = (data ?? []).map((r) => r.id);
   }
   if (waiting.length) {
     const { error } = await supabase.from("waiting_notes").insert(waiting);
     if (error) {
+      console.error("Saving held notes failed", error);
       // All or nothing: take back the notes just saved.
       if (savedIds.length) await supabase.from("evaluations").delete().in("id", savedIds);
-      return { ok: false, error: "Couldn't save the notes. Check your connection and try again." };
+      return {
+        ok: false,
+        error: isMissingTable(error)
+          ? "Holding notes for later isn’t set up yet: the “waiting notes” database update (20261005000000_waiting_notes.sql) hasn’t been run. Assign or remove the held notes to save the rest, or run that update first."
+          : "Couldn't save the held notes, so nothing was saved. Try again.",
+      };
     }
   }
 
   await removeUnusedPhotos(supabase, eventId, unusedPhotos);
   revalidatePath("/events", "layout");
   return { ok: true, saved: assigned.length, waiting: waiting.length };
+}
+
+// The table doesn't exist (a database update hasn't been run yet).
+function isMissingTable(error: { code?: string }) {
+  return error.code === "PGRST205" || error.code === "42P01";
 }
 
 // Removes photos from a scan that was abandoned, or whose notes were all
