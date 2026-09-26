@@ -285,9 +285,11 @@ function YouTubeMedia({ url, active }: { url: string; active: boolean }) {
 }
 
 // Videos start muted (phones only let them start by themselves that way), so
-// a small reminder fades in as each one starts and fades out again. It sits
-// below the video, or near the bottom of a tall Short, never over YouTube's
-// controls, and taps pass straight through it.
+// a small reminder fades in as each one starts and fades out again. It points
+// at YouTube's own speaker button, which sits in the video's top-left corner
+// while it plays muted: just above that corner, or beside it inside a tall
+// Short (which has no room above). It never covers the button, and taps pass
+// straight through it.
 const HINT_SHOWN_FOR = 2500;
 
 function UnmuteHint({ inside }: { inside: boolean }) {
@@ -304,13 +306,23 @@ function UnmuteHint({ inside }: { inside: boolean }) {
     <p
       role="status"
       data-unmute-hint
-      className={`pointer-events-none absolute left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-3.5 py-1.5 text-sm font-medium whitespace-nowrap text-white/90 ring-1 ring-white/15 backdrop-blur-sm motion-safe:transition-opacity motion-safe:duration-500 ${
-        inside ? "bottom-16" : "top-full mt-3"
+      className={`pointer-events-none absolute rounded-full bg-black/80 px-3.5 py-1.5 text-sm font-medium whitespace-nowrap text-white/90 ring-1 ring-white/15 backdrop-blur-sm motion-safe:transition-opacity motion-safe:duration-500 ${
+        inside ? "top-3 left-16" : "bottom-full left-1 mb-2.5"
       } ${visible ? "opacity-100" : "opacity-0"}`}
     >
+      {/* Little pointer toward the speaker button: down at the corner, or
+          left at the button beside it. */}
+      <span
+        aria-hidden
+        className={`absolute h-2.5 w-2.5 rotate-45 border-white/15 bg-black ${
+          inside ? "top-1/2 -left-[5px] -translate-y-1/2 border-b border-l" : "-bottom-[5px] left-5 border-r border-b"
+        }`}
+      />
       <span className="sr-only">Video is playing muted. </span>
-      Tap <span aria-hidden>🔇</span>
-      <span className="sr-only">the speaker button</span> to unmute
+      <span className="relative">
+        Tap <span aria-hidden>🔇</span>
+        <span className="sr-only">the speaker button</span> to unmute
+      </span>
     </p>
   );
 }
