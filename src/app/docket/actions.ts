@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { disconnect } from "@/lib/gmail/connection";
-import { extractInfoCards, loadDocket, sendReply, setShortlisted, setSkipped } from "@/lib/gmail/docket";
+import { extractInfoCards, loadDocket, sendReply, setShortlisted, setSkipped, trashEmail } from "@/lib/gmail/docket";
 import type { ReplyTemplate } from "@/lib/gmail/docket-types";
 import { createAuthedClient } from "@/lib/supabase/server";
 
@@ -19,6 +19,10 @@ export async function extractInfoCardsAction(messageIds: string[]) {
 
 export async function skipAction(messageId: string, threadId: string, skipped: boolean) {
   await setSkipped(messageId, threadId, skipped);
+}
+
+export async function deleteEmailAction(messageId: string, threadId: string) {
+  return trashEmail(messageId, threadId);
 }
 
 export async function sendReplyAction(messageId: string, template: ReplyTemplate, body: string) {

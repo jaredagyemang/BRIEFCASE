@@ -1,7 +1,6 @@
-import { DocketFeed } from "@/components/docket-feed";
+import { DocketHome } from "@/components/docket-home";
 import { PageScroller } from "@/components/page-scroller";
 import { getConnectionSummary } from "@/lib/gmail/connection";
-import { getCurrentUser } from "@/lib/staff";
 
 // Results of the Connect Gmail round trip, from ?gmail=…
 const MESSAGES: Record<string, { tone: "good" | "bad"; text: string }> = {
@@ -15,20 +14,16 @@ const MESSAGES: Record<string, { tone: "good" | "bad"; text: string }> = {
   "not-configured": { tone: "bad", text: "Gmail isn’t set up on this server yet (missing Google credentials)." },
 };
 
-// Daily Mode: a full-screen feed of the film (and Google Docs) coaches are
-// sent by email, or a Connect Gmail card until Gmail is connected.
+// Daily Mode: The Docket's home screen (time range, count, Start Reviewing,
+// View Shortlist), or a Connect Gmail card until Gmail is connected.
 export default async function DocketPage({ searchParams }: PageProps<"/docket">) {
   const params = await searchParams;
   const message = typeof params.gmail === "string" ? MESSAGES[params.gmail] : undefined;
-  const [connection, user] = await Promise.all([getConnectionSummary(), getCurrentUser()]);
+  const connection = await getConnectionSummary();
 
   if (connection) {
     return (
-      <DocketFeed
-        connectedEmail={connection.google_email}
-        coachName={user?.name ?? "Coach"}
-        notice={message?.tone === "good" ? message.text : undefined}
-      />
+      <DocketHome connectedEmail={connection.google_email} notice={message?.tone === "good" ? message.text : undefined} />
     );
   }
 

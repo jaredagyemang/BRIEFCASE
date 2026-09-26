@@ -27,6 +27,7 @@ const InfoSchema = z.object({
   major: Field,
   budget: Field,
   more_players: z.boolean(),
+  recruiting: z.enum(["yes", "no", "unsure"]),
 });
 
 const INSTRUCTIONS = `You are helping a college sports recruiting coach triage their inbox. Below is one email. Pull out the details of the recruit (the player being recommended or introducing themselves) for a quick-glance card.
@@ -40,13 +41,17 @@ Fields:
 - major: the intended college major. If the email says they're undecided, use "Undecided".
 - budget: what the family can pay / the budget mentioned, exactly as written, whether a flat number or a range (e.g. "$25,000", "$20k–30k per year").
 - more_players: true if the email is about more than one recruit (then fill the fields for the first one only).
+- recruiting: is this email actually about recruiting?
+  - "yes": it's clearly recruiting-related: it introduces or recommends a player, shares a player's film or highlights, or expresses interest in the program or in playing in college (from the player, a parent, a club or high school coach, or a recruiting service).
+  - "no": it's clearly not: a newsletter, marketing, a platform or social notification, a receipt, a personal or unrelated work email that just happens to contain a video or document link.
+  - "unsure": you genuinely can't tell (e.g. a forwarded link with no context, a vague message). Prefer "unsure" over "no" whenever there's a real chance a coach would want to see it: a wrongly hidden recruit is worse than an extra email to skip.
 
 For every field, choose exactly one:
 - null: the email doesn't give this. Leave it out rather than guess. A blank field is much better than a wrong one.
 - {"value": ..., "source": "stated"}: the email states it plainly (the value is written in the email, possibly in a signature or attached profile text).
 - {"value": ..., "source": "inferred"}: you worked it out indirectly, and it could be wrong. Examples: a grad year from "she's a junior" or from a club age group like "08G"; a position from "he scores a lot of goals"; a club from an email address domain; a name from an email address. Use this sparingly; if the clue is weak, use null.
 
-The sender may be the recruit themselves, a parent, or a coach/club director; the recruit's name is not necessarily the sender's. If the email isn't about a recruit at all (a newsletter, a platform notification with no player details, etc.), return null for every field and more_players false.
+The sender may be the recruit themselves, a parent, or a coach/club director; the recruit's name is not necessarily the sender's. If the email isn't about a recruit at all (a newsletter, a platform notification with no player details, etc.), return null for every field and more_players false, and set recruiting accordingly.
 
 Only use what's in this email. Never invent details.`;
 
@@ -109,5 +114,6 @@ function tidy(info: DocketInfo): DocketInfo {
     major: clean(info.major),
     budget: clean(info.budget),
     more_players: Boolean(info.more_players),
+    recruiting: info.recruiting === "yes" || info.recruiting === "no" ? info.recruiting : "unsure",
   };
 }
