@@ -46,6 +46,8 @@ export type DocketEmail = {
   info: DocketInfo | null;
   replied: { template: ReplyTemplate; at: string } | null;
   shortlisted: boolean;
+  // On "Shared with team" (separate from the Shortlist).
+  shared: boolean;
 };
 
 export type DocketResult =

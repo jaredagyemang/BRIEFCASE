@@ -81,7 +81,7 @@ export async function loadDocket(): Promise<DocketResult> {
       return inBatches(ids, 10, (id) => getMessage(token, id));
     });
     const ids = messages.map((m) => m.id);
-    const [{ data: items }, { data: shortlisted }] = await Promise.all([
+    const [{ data: items }, { data: shortlisted }, { data: shared }] = await Promise.all([
       supabase
         .from("docket_items")
         .select("gmail_message_id, extraction, skipped_at, replied_at, reply_template")
@@ -93,9 +93,16 @@ export async function loadDocket(): Promise<DocketResult> {
         .eq("source_staff_id", row.staff_id)
         .in("gmail_message_id", ids)
         .returns<{ gmail_message_id: string }[]>(),
+      supabase
+        .from("team_shares")
+        .select("gmail_message_id")
+        .eq("source_staff_id", row.staff_id)
+        .in("gmail_message_id", ids)
+        .returns<{ gmail_message_id: string }[]>(),
     ]);
     const byId = new Map((items ?? []).map((i) => [i.gmail_message_id, i]));
     const onShortlist = new Set((shortlisted ?? []).map((s) => s.gmail_message_id));
+    const onShared = new Set((shared ?? []).map((s) => s.gmail_message_id));
 
     const emails = messages
       .map((m): DocketEmail => {
@@ -109,6 +116,7 @@ export async function loadDocket(): Promise<DocketResult> {
           info: isCurrentInfo(item?.extraction) ? item.extraction : null,
           replied: item?.replied_at && item.reply_template ? { template: item.reply_template, at: item.replied_at } : null,
           shortlisted: onShortlist.has(m.id),
+          shared: onShared.has(m.id),
         };
       })
       .filter((e) => {
@@ -267,20 +275,38 @@ export async function sendReply(messageId: string, template: ReplyTemplate, body
   }
 }
 
-// --- Shortlist (shared by all staff) -----------------------------------------------
+// --- Shortlist and "Shared with team" (both seen by all staff) ---------------------
+
+// Each is a separate list of snapshots with the same shape: an email can be
+// on either, both, or neither.
+export type SnapshotList = "shortlist" | "shared";
+export const SNAPSHOT_TABLE: Record<SnapshotList, "shortlist" | "team_shares"> = {
+  shortlist: "shortlist",
+  shared: "team_shares",
+};
+const LIST_NAME: Record<SnapshotList, string> = { shortlist: "the Shortlist", shared: "Shared with team" };
 
 export async function setShortlisted(messageId: string, shortlisted: boolean) {
+  return setOnList("shortlist", messageId, shortlisted);
+}
+
+export async function setShared(messageId: string, shared: boolean) {
+  return setOnList("shared", messageId, shared);
+}
+
+async function setOnList(list: SnapshotList, messageId: string, on: boolean) {
   const connection = await loadConnection();
   if (!connection) throw new Error("Gmail isn't connected.");
   const { supabase, row } = connection;
+  const table = SNAPSHOT_TABLE[list];
 
-  if (!shortlisted) {
+  if (!on) {
     const { error } = await supabase
-      .from("shortlist")
+      .from(table)
       .delete()
       .eq("source_staff_id", row.staff_id)
       .eq("gmail_message_id", messageId);
-    if (error) throw new Error(`Couldn't update the Shortlist: ${error.message}`);
+    if (error) throw new Error(`Couldn't update ${LIST_NAME[list]}: ${error.message}`);
     return;
   }
 
@@ -292,7 +318,7 @@ export async function setShortlisted(messageId: string, shortlisted: boolean) {
     .eq("gmail_message_id", messageId)
     .maybeSingle<Pick<ItemRow, "extraction">>();
   const { from, fromEmail, subject, date } = describe(message);
-  const { error } = await supabase.from("shortlist").upsert(
+  const { error } = await supabase.from(table).upsert(
     {
       source_staff_id: row.staff_id,
       gmail_message_id: messageId,
@@ -306,7 +332,7 @@ export async function setShortlisted(messageId: string, shortlisted: boolean) {
     },
     { onConflict: "source_staff_id,gmail_message_id", ignoreDuplicates: true },
   );
-  if (error) throw new Error(`Couldn't update the Shortlist: ${error.message}`);
+  if (error) throw new Error(`Couldn't update ${LIST_NAME[list]}: ${error.message}`);
 }
 
 export function emptyInfo(): DocketInfo {

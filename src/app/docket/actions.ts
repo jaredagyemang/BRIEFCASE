@@ -2,7 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 import { disconnect } from "@/lib/gmail/connection";
-import { extractInfoCards, loadDocket, sendReply, setShortlisted, setSkipped, trashEmail } from "@/lib/gmail/docket";
+import {
+  SNAPSHOT_TABLE,
+  extractInfoCards,
+  loadDocket,
+  sendReply,
+  setShared,
+  setShortlisted,
+  setSkipped,
+  trashEmail,
+  type SnapshotList,
+} from "@/lib/gmail/docket";
 import type { ReplyTemplate } from "@/lib/gmail/docket-types";
 import { createAuthedClient } from "@/lib/supabase/server";
 
@@ -34,12 +44,20 @@ export async function shortlistAction(messageId: string, shortlisted: boolean) {
   revalidatePath("/docket/shortlist");
 }
 
-// From the shared Shortlist page: any coach can remove a player.
-export async function removeFromShortlistAction(id: string) {
+export async function shareAction(messageId: string, shared: boolean) {
+  await setShared(messageId, shared);
+  revalidatePath("/docket/shared");
+}
+
+const LIST_PATH: Record<SnapshotList, string> = { shortlist: "/docket/shortlist", shared: "/docket/shared" };
+
+// From the Shortlist or "Shared with team" page: any coach can remove an item.
+export async function removeFromListAction(list: SnapshotList, id: string) {
+  if (!(list in SNAPSHOT_TABLE)) throw new Error("Unknown list");
   const supabase = await createAuthedClient();
-  const { error } = await supabase.from("shortlist").delete().eq("id", id);
-  if (error) throw new Error(`Couldn't remove from the Shortlist: ${error.message}`);
-  revalidatePath("/docket/shortlist");
+  const { error } = await supabase.from(SNAPSHOT_TABLE[list]).delete().eq("id", id);
+  if (error) throw new Error(`Couldn't remove it: ${error.message}`);
+  revalidatePath(LIST_PATH[list]);
 }
 
 export async function disconnectGmail() {
