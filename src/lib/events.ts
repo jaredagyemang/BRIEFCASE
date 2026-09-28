@@ -9,6 +9,8 @@ export type Event = {
   status: EventStatus;
   closed_at: string | null;
   created_at: string;
+  // Any change to the event or anything in it (see the last_edited migration).
+  last_edited_at: string;
 };
 
 // A player's appearance at one event: what belongs to that event only.

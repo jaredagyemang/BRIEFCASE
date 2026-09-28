@@ -1,13 +1,17 @@
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { Suspense } from "react";
 import { DeleteEventButton } from "@/components/delete-event-button";
 import { SearchBox } from "@/components/search-box";
+import { SortControl } from "@/components/sort-control";
 import { SwipeTabs } from "@/components/swipe-tabs";
 import { describePlayer } from "@/lib/duplicates";
 import { eventPath, eventPlayerPath, formatEventDate, type Event } from "@/lib/events";
 import { EVENT_COLUMNS } from "@/lib/events-server";
 import { TRAFFIC_LIGHT_DOT, type Player, type TrafficLight } from "@/lib/players";
+import { EVENTS_SORT_COOKIE, EVENTS_SORTS, parseSort } from "@/lib/sort";
 import { createClient } from "@/lib/supabase/server";
+import { timeAgo } from "@/lib/time";
 
 type EventWithCount = Event & { event_players: { count: number }[] };
 
@@ -21,12 +25,16 @@ export default async function EventsPage({ searchParams }: PageProps<"/events">)
   const passwordUpdated = params.password === "updated";
   const supabase = await createClient();
 
-  const { data: events } = await supabase
-    .from("events")
-    .select(`${EVENT_COLUMNS}, event_players(count)`)
-    .order("event_date", { ascending: false })
-    .order("created_at", { ascending: false })
-    .returns<EventWithCount[]>();
+  const sort = parseSort((await cookies()).get(EVENTS_SORT_COOKIE)?.value, EVENTS_SORTS);
+  const ascending = sort.dir === "asc";
+  let query = supabase.from("events").select(`${EVENT_COLUMNS}, event_players(count)`);
+  query =
+    sort.by === "edited"
+      ? query.order("last_edited_at", { ascending })
+      : sort.by === "name"
+        ? query.order("name", { ascending }).order("event_date", { ascending: false })
+        : query.order("event_date", { ascending }).order("created_at", { ascending });
+  const { data: events } = await query.returns<EventWithCount[]>();
   const active = (events ?? []).filter((e) => e.status === "active");
   const previous = (events ?? []).filter((e) => e.status === "closed");
 
@@ -61,19 +69,24 @@ export default async function EventsPage({ searchParams }: PageProps<"/events">)
         {q ? (
           <SearchResults q={q} />
         ) : (
-          <SwipeTabs
-            label="Events"
-            tabs={[
-              { id: "active", label: "Active Events", count: active.length },
-              { id: "previous", label: "Previous Showcases", count: previous.length },
-            ]}
-          >
-            <EventList
-              events={active}
-              empty="No active events. Start one when you arrive at a showcase."
-            />
-            <EventList events={previous} empty="Closed events will show up here." />
-          </SwipeTabs>
+          <>
+            <div className="mb-3">
+              <SortControl cookie={EVENTS_SORT_COOKIE} options={EVENTS_SORTS} value={sort} />
+            </div>
+            <SwipeTabs
+              label="Events"
+              tabs={[
+                { id: "active", label: "Active Events", count: active.length },
+                { id: "previous", label: "Previous Showcases", count: previous.length },
+              ]}
+            >
+              <EventList
+                events={active}
+                empty="No active events. Start one when you arrive at a showcase."
+              />
+              <EventList events={previous} empty="Closed events will show up here." />
+            </SwipeTabs>
+          </>
         )}
       </div>
     </div>
@@ -99,6 +112,7 @@ function EventList({ events, empty }: { events: EventWithCount[]; empty: string 
                 <p className="text-sm text-muted">
                   {formatEventDate(event.event_date)} · {players} player{players === 1 ? "" : "s"}
                 </p>
+                <p className="text-xs text-muted">Edited {timeAgo(event.last_edited_at)}</p>
               </div>
               <span className="text-muted">›</span>
             </Link>
