@@ -1,18 +1,23 @@
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { Suspense } from "react";
 import { EventStatusButton } from "@/components/event-status-button";
 import { ExportNotesLink } from "@/components/export-notes-link";
 import { SearchBox } from "@/components/search-box";
+import { SortControl } from "@/components/sort-control";
 import { StatusPill } from "@/components/status-pill";
 import { describePlayer, duplicateIds } from "@/lib/duplicates";
 import { eventPath, eventPlayerPath, formatEventDate } from "@/lib/events";
 import { getEvent } from "@/lib/events-server";
 import { LIFECYCLE_STATUSES, TRAFFIC_LIGHT_DOT, isLifecycleStatus, type Player, type TrafficLight } from "@/lib/players";
+import { PLAYERS_SORT_COOKIE, PLAYERS_SORTS, parseSort } from "@/lib/sort";
 import { createClient } from "@/lib/supabase/server";
+import { timeAgo } from "@/lib/time";
 
 type Row = {
   jersey_number: string | null;
   traffic_light: TrafficLight | null;
+  last_edited_at: string;
   player: Pick<
     Player,
     "id" | "first_name" | "last_name" | "grad_year" | "position" | "club_team" | "lifecycle_status"
@@ -28,12 +33,13 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
   const added = typeof query.added === "string" ? Number(query.added) : 0;
 
   const event = await getEvent(eventId);
+  const sort = parseSort((await cookies()).get(PLAYERS_SORT_COOKIE)?.value, PLAYERS_SORTS);
   const supabase = await createClient();
 
   const [{ data, error }, { data: allPlayers }, { count: waitingNotes }] = await Promise.all([
     supabase
       .from("event_players")
-      .select("jersey_number, traffic_light, player:players!inner(id, first_name, last_name, grad_year, position, club_team, lifecycle_status)")
+      .select("jersey_number, traffic_light, last_edited_at, player:players!inner(id, first_name, last_name, grad_year, position, club_team, lifecycle_status)")
       .eq("event_id", eventId)
       .returns<Row[]>(),
     // Possible duplicates across every player, so they're flagged here too.
@@ -61,10 +67,13 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
         .filter(Boolean)
         .some((v) => v!.toLowerCase().includes(q));
     })
-    .sort(
-      (a, b) =>
-        a.player.last_name.localeCompare(b.player.last_name) || a.player.first_name.localeCompare(b.player.first_name),
-    );
+    .sort((a, b) => {
+      const byName =
+        a.player.last_name.localeCompare(b.player.last_name) || a.player.first_name.localeCompare(b.player.first_name);
+      const primary = sort.by === "edited" ? a.last_edited_at.localeCompare(b.last_edited_at) : byName;
+      // Ties (e.g. players added together) stay A–Z either way.
+      return (sort.dir === "asc" ? primary : -primary) || byName;
+    });
 
   const selectedChip = showDuplicates ? "duplicates" : status;
   const chips = [
@@ -176,6 +185,12 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
         })}
       </div>
 
+      {everyone.length > 1 && (
+        <div className="mt-3">
+          <SortControl cookie={PLAYERS_SORT_COOKIE} options={PLAYERS_SORTS} value={sort} />
+        </div>
+      )}
+
       {error ? (
         <p className="mt-6 rounded-3xl bg-red/10 p-6 text-red">Couldn&apos;t load players: {error.message}</p>
       ) : rows.length === 0 ? (
@@ -188,7 +203,7 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
         </div>
       ) : (
         <ul className="mt-4 divide-y divide-border overflow-hidden rounded-3xl bg-surface">
-          {rows.map(({ player: p, traffic_light, jersey_number }) => (
+          {rows.map(({ player: p, traffic_light, jersey_number, last_edited_at }) => (
             <li key={p.id}>
               <Link
                 href={eventPlayerPath(eventId, p.id)}
@@ -210,6 +225,7 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
                   <p className="truncate text-sm text-muted">
                     {describePlayer({ ...p, jersey_number }) || "No details yet"}
                   </p>
+                  <p className="text-xs text-muted">Edited {timeAgo(last_edited_at)}</p>
                   {duplicates.has(p.id) && (
                     <span
                       title="Possible duplicate: same name and grad year as another player"

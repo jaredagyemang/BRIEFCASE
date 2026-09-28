@@ -5,7 +5,7 @@ import type { Event, EventPlayer } from "@/lib/events";
 import type { Player } from "@/lib/players";
 import { createClient } from "@/lib/supabase/server";
 
-export const EVENT_COLUMNS = "id, name, event_date, status, closed_at, created_at";
+export const EVENT_COLUMNS = "id, name, event_date, status, closed_at, created_at, last_edited_at";
 
 export const getEvent = cache(async (eventId: string): Promise<Event> => {
   const supabase = await createClient();

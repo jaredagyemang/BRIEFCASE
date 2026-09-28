@@ -197,6 +197,13 @@ export async function updatePlayer(
   if (error || jerseyError) {
     return { error: (error ?? jerseyError)!.message, values: submittedValues(formData) };
   }
+  // Details are shared by every event the player is in; count the edit as
+  // made in this event only. (A missed timestamp isn't worth failing over.)
+  const { error: touchError } = await supabase.rpc("touch_event_player", {
+    target_event_id: eventId,
+    target_player_id: playerId,
+  });
+  if (touchError) console.error("Couldn't mark player as edited", touchError);
 
   revalidateEvents();
   redirect(eventPlayerPath(eventId, playerId));
