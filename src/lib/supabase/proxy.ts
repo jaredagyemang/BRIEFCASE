@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 // Refreshes the Supabase session cookie on every request and sends
-// signed-out visitors to /login.
+// signed-out visitors to /login (except to the password reset screens).
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -32,8 +32,13 @@ export async function updateSession(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const signedIn = Boolean(data?.claims);
   const onLogin = request.nextUrl.pathname.startsWith("/login");
+  // Password reset works signed in or out: using the emailed link signs the
+  // coach in before the new password is saved.
+  const onPasswordReset = ["/forgot-password", "/reset-password"].some((p) =>
+    request.nextUrl.pathname.startsWith(p),
+  );
 
-  if (!signedIn && !onLogin) {
+  if (!signedIn && !onLogin && !onPasswordReset) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.search = "";
