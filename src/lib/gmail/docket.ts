@@ -14,6 +14,7 @@ import {
   isCurrentInfo,
   type DocketEmail,
   type DocketInfo,
+  SHARE_NOTE_MAX,
   type DocketResult,
   type ReplyTemplate,
 } from "./docket-types";
@@ -290,11 +291,12 @@ export async function setShortlisted(messageId: string, shortlisted: boolean) {
   return setOnList("shortlist", messageId, shortlisted);
 }
 
-export async function setShared(messageId: string, shared: boolean) {
-  return setOnList("shared", messageId, shared);
+// `note`: an optional message for the team, shown on the shared list.
+export async function setShared(messageId: string, shared: boolean, note?: string | null) {
+  return setOnList("shared", messageId, shared, note);
 }
 
-async function setOnList(list: SnapshotList, messageId: string, on: boolean) {
+async function setOnList(list: SnapshotList, messageId: string, on: boolean, note?: string | null) {
   const connection = await loadConnection();
   if (!connection) throw new Error("Gmail isn't connected.");
   const { supabase, row } = connection;
@@ -329,6 +331,7 @@ async function setOnList(list: SnapshotList, messageId: string, on: boolean) {
       email_date: date,
       links: uniqueMedia(extractLinks(bodyText(message.payload))),
       added_by: row.staff_id,
+      ...(list === "shared" && { note: note?.trim().slice(0, SHARE_NOTE_MAX) || null }),
     },
     { onConflict: "source_staff_id,gmail_message_id", ignoreDuplicates: true },
   );

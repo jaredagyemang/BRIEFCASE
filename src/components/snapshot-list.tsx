@@ -18,6 +18,7 @@ type SnapshotRow = {
   email_date: string | null;
   links: FoundLink[];
   created_at: string;
+  note?: string | null;
   adder: { full_name: string } | null;
 };
 
@@ -44,9 +45,10 @@ function Value({ field }: { field: InfoField }) {
 const day = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
 
-const TABLE: Record<SnapshotList, { table: string; fkey: string }> = {
-  shortlist: { table: "shortlist", fkey: "shortlist_added_by_fkey" },
-  shared: { table: "team_shares", fkey: "team_shares_added_by_fkey" },
+const TABLE: Record<SnapshotList, { table: string; fkey: string; extra: string }> = {
+  shortlist: { table: "shortlist", fkey: "shortlist_added_by_fkey", extra: "" },
+  // Shared items can carry a note for the team.
+  shared: { table: "team_shares", fkey: "team_shares_added_by_fkey", extra: ", note" },
 };
 
 export async function SnapshotListView({
@@ -59,11 +61,11 @@ export async function SnapshotListView({
   addedLabel: string;
 }) {
   const supabase = await createClient();
-  const { table, fkey } = TABLE[list];
+  const { table, fkey, extra } = TABLE[list];
   const { data, error } = await supabase
     .from(table)
     .select(
-      `id, info, sender_name, sender_email, subject, email_date, links, created_at, adder:staff!${fkey}(full_name)`,
+      `id, info, sender_name, sender_email, subject, email_date, links, created_at${extra}, adder:staff!${fkey}(full_name)`,
     )
     .order("created_at", { ascending: false })
     .returns<SnapshotRow[]>();
@@ -119,6 +121,11 @@ export async function SnapshotListView({
             <p className="mt-3 text-xs text-muted">
               {addedLabel} {row.adder?.full_name ?? "a former staff member"} · {timeAgo(row.created_at)}
             </p>
+            {row.note && (
+              <blockquote className="mt-2 rounded-2xl border-l-4 border-accent bg-surface-muted px-3 py-2 text-sm break-words whitespace-pre-wrap">
+                {row.note}
+              </blockquote>
+            )}
           </li>
         );
       })}

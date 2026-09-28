@@ -69,3 +69,7 @@ export const DEFAULT_RANGE: RangeId = "3d";
 export const rangeFor = (id: string | null | undefined) => RANGES.find((r) => r.id === id) ?? RANGES.find((r) => r.id === DEFAULT_RANGE)!;
 export const inRange = (email: { date: string | null }, hours: number, now = Date.now()) =>
   email.date !== null && now - Date.parse(email.date) <= hours * 3600_000;
+
+// Longest note a coach can add when sharing an Info card with the team (the
+// database allows the same).
+export const SHARE_NOTE_MAX = 500;
