@@ -15,6 +15,7 @@ import { Sheet, SheetButton, SheetTitle } from "@/components/sheet";
 import { clearDocketCache, useDocket } from "@/components/use-docket";
 import {
   DECLINING,
+  SHARE_NOTE_MAX,
   REPLY_TEMPLATES,
   inRange,
   rangeFor,
@@ -298,11 +299,11 @@ function Feed({
   // Share / un-share, one at a time per email, so a quick Share → Undo can't
   // land in the wrong order.
   const shareQueue = useRef(new Map<string, Promise<unknown>>());
-  function setSharedOnServer(email: DocketEmail, shared: boolean, failMessage: string) {
+  function setSharedOnServer(email: DocketEmail, shared: boolean, failMessage: string, note?: string) {
     const previous = shareQueue.current.get(email.id) ?? Promise.resolve();
     const next = previous
       .catch(() => {})
-      .then(() => shareAction(email.id, shared))
+      .then(() => shareAction(email.id, shared, note))
       .catch(() => {
         updateEmail(email.id, { shared: !shared });
         setToast({ message: failMessage });
@@ -310,7 +311,7 @@ function Feed({
     shareQueue.current.set(email.id, next);
   }
 
-  function share(email: DocketEmail) {
+  function share(email: DocketEmail, note: string) {
     updateEmail(email.id, { shared: true });
     setToast({
       message: "Shared with team",
@@ -320,7 +321,7 @@ function Feed({
         setSharedOnServer(email, false, "Couldn’t undo. Try again.");
       },
     });
-    setSharedOnServer(email, true, "Couldn’t share it. Try again.");
+    setSharedOnServer(email, true, "Couldn’t share it. Try again.", note);
   }
 
   function unshare(email: DocketEmail) {
@@ -400,7 +401,7 @@ function Feed({
               onSkip: () => skip(email),
               onDeleted: () => deleted(email),
               onShortlist: () => toggleShortlist(email),
-              onShare: () => share(email),
+              onShare: (note) => share(email, note),
               onUnshare: () => unshare(email),
               onReplied: (template) => replied(email, template),
             }}
@@ -465,7 +466,7 @@ type InfoProps = {
   onSkip: () => void;
   onDeleted: () => void;
   onShortlist: () => void;
-  onShare: () => void;
+  onShare: (note: string) => void;
   onUnshare: () => void;
   onReplied: (template: ReplyTemplate) => void;
 };
@@ -555,6 +556,8 @@ function InfoCard({
   const [replying, setReplying] = useState<ReplyTemplate | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [unsharing, setUnsharing] = useState(false);
+  // The "Share to team" panel is open (with its optional note).
+  const [sharing, setSharing] = useState(false);
   const info = email.info;
   const pending = !info && !failed;
 
@@ -656,7 +659,7 @@ function InfoCard({
             {/* Separate from the Shortlist: either, both, or neither. */}
             <button
               type="button"
-              onClick={email.shared ? () => setUnsharing(true) : onShare}
+              onClick={() => (email.shared ? setUnsharing(true) : setSharing(true))}
               aria-pressed={email.shared}
               className={`rounded-xl px-3 py-2.5 text-sm font-semibold ${
                 email.shared
@@ -689,6 +692,16 @@ function InfoCard({
         </div>
       </div>
 
+      {sharing && (
+        <ShareSheet
+          name={info?.name?.value ?? null}
+          onClose={() => setSharing(false)}
+          onShare={(note) => {
+            setSharing(false);
+            onShare(note);
+          }}
+        />
+      )}
       {unsharing && (
         <Sheet onClose={() => setUnsharing(false)}>
           <SheetTitle
@@ -1128,6 +1141,47 @@ export function FeedMenu({
         </Sheet>
       )}
     </>
+  );
+}
+
+// "Share to team": an optional note for the other coaches, blank each time.
+function ShareSheet({
+  name,
+  onClose,
+  onShare,
+}: {
+  name: string | null;
+  onClose: () => void;
+  onShare: (note: string) => void;
+}) {
+  const [note, setNote] = useState("");
+  return (
+    <Sheet onClose={onClose}>
+      <SheetTitle
+        title={name ? `Share ${name} with the team` : "Share with the team"}
+        subtitle="All staff will see it in Shared with team."
+      />
+      <label className="block">
+        <span className="mb-1.5 block px-1 text-sm font-medium text-muted">Add a note for the team (optional)</span>
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          rows={3}
+          maxLength={SHARE_NOTE_MAX}
+          placeholder="e.g. Worth a look for next year's back line"
+          className="w-full resize-none rounded-2xl border border-border bg-background px-4 py-3 text-base outline-none placeholder:text-muted focus:border-accent focus:ring-4 focus:ring-accent/15"
+        />
+      </label>
+      {note.length > SHARE_NOTE_MAX - 50 && (
+        <p className="px-1 text-right text-xs text-muted">
+          {note.length}/{SHARE_NOTE_MAX}
+        </p>
+      )}
+      <SheetButton variant="primary" onClick={() => onShare(note)}>
+        Share
+      </SheetButton>
+      <SheetButton onClick={onClose}>Cancel</SheetButton>
+    </Sheet>
   );
 }
 

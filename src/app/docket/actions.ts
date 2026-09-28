@@ -44,8 +44,8 @@ export async function shortlistAction(messageId: string, shortlisted: boolean) {
   revalidatePath("/docket/shortlist");
 }
 
-export async function shareAction(messageId: string, shared: boolean) {
-  await setShared(messageId, shared);
+export async function shareAction(messageId: string, shared: boolean, note?: string | null) {
+  await setShared(messageId, shared, typeof note === "string" ? note : null);
   revalidatePath("/docket/shared");
 }
 
