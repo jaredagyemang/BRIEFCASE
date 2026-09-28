@@ -2,6 +2,7 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { VERIFIED_COOKIE, VERIFIED_COOKIE_OPTIONS } from "@/lib/password-reset";
 import { createClient } from "@/lib/supabase/server";
 
 export type ResetState = { error: string; field?: "password" | "confirm" } | { expired: true } | undefined;
@@ -10,14 +11,11 @@ const MIN = 8;
 // Supabase can't store passwords longer than 72 characters.
 const MAX = 72;
 
-// Set once this browser has used a reset link, so a second try (after e.g.
-// "that's your current password") doesn't need the link again: it only
-// works once.
-const VERIFIED_COOKIE = "briefcase-reset-verified";
-
-// Checks the emailed link, which signs the coach in, then sets their new
-// password. The link is only used once the passwords are valid, so a typo
-// doesn't waste it.
+// Checks the emailed link (token_hash links), which signs the coach in, then
+// sets their new password. The link is only used once the passwords are
+// valid, so a typo doesn't waste it. With Supabase's default email, the link
+// was already used by the callback route, which marks this browser as
+// verified.
 export async function setNewPassword(_prev: ResetState, formData: FormData): Promise<ResetState> {
   const password = String(formData.get("password") ?? "");
   const confirm = String(formData.get("confirm") ?? "");
@@ -36,13 +34,7 @@ export async function setNewPassword(_prev: ResetState, formData: FormData): Pro
     if (!tokenHash) return { expired: true };
     const { data, error } = await supabase.auth.verifyOtp({ type: "recovery", token_hash: tokenHash });
     if (error || !data.user) return { expired: true };
-    cookieStore.set(VERIFIED_COOKIE, data.user.id, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/reset-password",
-      maxAge: 15 * 60,
-    });
+    cookieStore.set(VERIFIED_COOKIE, data.user.id, VERIFIED_COOKIE_OPTIONS);
   }
 
   const { error } = await supabase.auth.updateUser({ password });

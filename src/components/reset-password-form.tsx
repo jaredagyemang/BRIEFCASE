@@ -5,17 +5,18 @@ import { setNewPassword } from "@/app/reset-password/actions";
 import { AuthScreen } from "@/components/auth-screen";
 import { ForgotPasswordForm } from "@/components/forgot-password-form";
 import { inputClass } from "@/components/ui";
+import type { ResetProblem } from "@/lib/password-reset";
 
-// New password twice, then save. If the link has expired or was already
-// used, offers a new one right here.
-export function ResetPasswordForm({ tokenHash }: { tokenHash: string }) {
+// New password twice, then save. If the link can't be used (expired or
+// already used), offers a new one right here.
+export function ResetPasswordForm({ tokenHash, problem }: { tokenHash: string; problem: ResetProblem | null }) {
   const [state, formAction, pending] = useActionState(setNewPassword, undefined);
   const [show, setShow] = useState(false);
   // Kept in state so a mistake (e.g. passwords that don't match) doesn't
   // clear what the coach typed.
   const [values, setValues] = useState({ password: "", confirm: "" });
 
-  if (!tokenHash || (state && "expired" in state)) {
+  if (problem === "expired" || (state && "expired" in state)) {
     return (
       <AuthScreen title="This link has expired" subtitle="Reset links work once, for 1 hour. Send yourself a new one.">
         <div role="alert" className="mb-4 rounded-2xl bg-red/10 px-4 py-3 text-sm font-medium text-red">
