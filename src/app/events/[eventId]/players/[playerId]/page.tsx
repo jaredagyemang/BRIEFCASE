@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ContactActions } from "@/components/contact-actions";
 import { DetailList } from "@/components/detail-list";
+import { ExportPlayerButton } from "@/components/export-player-button";
 import { PhotoThumb } from "@/components/photo-viewer";
 import { PlayerNotes, type NoteItem } from "@/components/player-notes";
 import { RatingButtons } from "@/components/rating-buttons";
@@ -241,12 +242,19 @@ export default async function EventPlayerPage({ params, searchParams }: PageProp
         <Link href={eventPath(eventId)} className="min-w-0 truncate text-accent-ink">
           ‹ {event.name}
         </Link>
-        <Link
-          href={`${eventPlayerPath(eventId, playerId)}/edit`}
-          className="shrink-0 rounded-full bg-surface-muted px-4 py-1.5 text-sm font-semibold"
-        >
-          Edit
-        </Link>
+        <div className="flex shrink-0 gap-2">
+          <ExportPlayerButton
+            href={`${eventPlayerPath(eventId, playerId)}/export`}
+            playerName={`${player.first_name} ${player.last_name}`}
+            otherEvents={others.length}
+          />
+          <Link
+            href={`${eventPlayerPath(eventId, playerId)}/edit`}
+            className="shrink-0 rounded-full bg-surface-muted px-4 py-1.5 text-sm font-semibold"
+          >
+            Edit
+          </Link>
+        </div>
       </div>
 
       {possibleDuplicates.length > 0 && (

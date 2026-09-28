@@ -1,54 +1,94 @@
-// A minimal Excel (.xlsx) writer: one sheet, a bold header row that stays in
-// place when scrolling, set column widths, and wrapped text where asked.
-// Works in the browser and on the server, with no dependencies.
+// A minimal Excel (.xlsx) writer: one or more sheets, each with a bold
+// header row that stays in place when scrolling, set column widths, and
+// wrapped text where asked. Works in the browser and on the server, with no
+// dependencies.
 //
 // An .xlsx file is a zip of a few XML files; they're stored uncompressed,
 // which every spreadsheet app accepts.
 
-export type Column = { header: string; width: number; wrap?: boolean };
+export type Column = { header: string; width: number; wrap?: boolean; bold?: boolean };
 export type Cell = string | number | null | undefined;
+// filter: false leaves out the header's filter buttons (e.g. a short list of
+// details rather than a table).
+export type Sheet = { name: string; columns: Column[]; rows: Cell[][]; filter?: boolean };
 
 export function buildXlsx(sheetName: string, columns: Column[], rows: Cell[][]): Uint8Array<ArrayBuffer> {
-  const colName = (i: number) => {
-    let name = "";
-    for (let n = i + 1; n > 0; n = Math.floor((n - 1) / 26)) name = String.fromCharCode(65 + ((n - 1) % 26)) + name;
-    return name;
-  };
-  const lastCol = colName(columns.length - 1);
+  return buildWorkbook([{ name: sheetName, columns, rows }]);
+}
 
-  // Styles: 0 = plain, 1 = header (bold, shaded), 2 = wrapped text, top-aligned, 3 = top-aligned.
-  const cell = (value: Cell, ref: string, style: number) => {
-    if (value === null || value === undefined || value === "") return style ? `<c r="${ref}" s="${style}"/>` : "";
-    if (typeof value === "number" && Number.isFinite(value)) return `<c r="${ref}" s="${style}"><v>${value}</v></c>`;
-    return `<c r="${ref}" s="${style}" t="inlineStr"><is><t xml:space="preserve">${xml(String(value))}</t></is></c>`;
-  };
+const colName = (i: number) => {
+  let name = "";
+  for (let n = i + 1; n > 0; n = Math.floor((n - 1) / 26)) name = String.fromCharCode(65 + ((n - 1) % 26)) + name;
+  return name;
+};
+
+// Styles: 0 = plain, 1 = header (bold, shaded), 2 = wrapped text, top-aligned,
+// 3 = top-aligned, 4 = bold, top-aligned.
+const cellXml = (value: Cell, ref: string, style: number) => {
+  if (value === null || value === undefined || value === "") return style ? `<c r="${ref}" s="${style}"/>` : "";
+  if (typeof value === "number" && Number.isFinite(value)) return `<c r="${ref}" s="${style}"><v>${value}</v></c>`;
+  return `<c r="${ref}" s="${style}" t="inlineStr"><is><t xml:space="preserve">${xml(String(value))}</t></is></c>`;
+};
+
+function sheetXml({ columns, rows, filter = true }: Sheet) {
+  const lastCol = colName(columns.length - 1);
+  const style = (c: Column) => (c.bold ? 4 : c.wrap ? 2 : 3);
   const sheetRows = [
-    `<row r="1">${columns.map((c, i) => cell(c.header, `${colName(i)}1`, 1)).join("")}</row>`,
+    `<row r="1">${columns.map((c, i) => cellXml(c.header, `${colName(i)}1`, 1)).join("")}</row>`,
     ...rows.map(
       (row, r) =>
-        `<row r="${r + 2}">${columns.map((c, i) => cell(row[i], `${colName(i)}${r + 2}`, c.wrap ? 2 : 3)).join("")}</row>`,
+        `<row r="${r + 2}">${columns.map((c, i) => cellXml(row[i], `${colName(i)}${r + 2}`, style(c))).join("")}</row>`,
     ),
   ];
-
-  const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>${columns
     .map((c, i) => `<col min="${i + 1}" max="${i + 1}" width="${c.width}" customWidth="1"/>`)
-    .join("")}</cols><sheetData>${sheetRows.join("")}</sheetData><autoFilter ref="A1:${lastCol}${rows.length + 1}"/></worksheet>`;
+    .join("")}</cols><sheetData>${sheetRows.join("")}</sheetData>${
+    filter ? `<autoFilter ref="A1:${lastCol}${rows.length + 1}"/>` : ""
+  }</worksheet>`;
+}
 
-  const safeName = xml(sheetName.replace(/[\\/?*[\]:]/g, " ").slice(0, 31).trim() || "Sheet1");
+export function buildWorkbook(sheets: Sheet[]): Uint8Array<ArrayBuffer> {
+  const used = new Set<string>();
+  const names = sheets.map((s, i) => {
+    let name = s.name.replace(/[\\/?*[\]:]/g, " ").slice(0, 31).trim() || `Sheet${i + 1}`;
+    while (used.has(name.toLowerCase())) name = `${name.slice(0, 28)} ${i + 1}`;
+    used.add(name.toLowerCase());
+    return name;
+  });
+  const filters = sheets
+    .map((s, i) =>
+      s.filter === false
+        ? ""
+        : `<definedName name="_xlnm._FilterDatabase" localSheetId="${i}" hidden="1">'${xml(names[i]).replace(/'/g, "''")}'!$A$1:$${colName(s.columns.length - 1)}$${s.rows.length + 1}</definedName>`,
+    )
+    .join("");
+
   const files: Record<string, string> = {
     "[Content_Types].xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`,
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${sheets
+      .map(
+        (_, i) =>
+          `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`,
+      )
+      .join("")}<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`,
     "_rels/.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
     "xl/workbook.xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${safeName}" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">'${safeName.replace(/'/g, "''")}'!$A$1:$${lastCol}$${rows.length + 1}</definedName></definedNames></workbook>`,
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${names
+      .map((n, i) => `<sheet name="${xml(n)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`)
+      .join("")}</sheets>${filters ? `<definedNames>${filters}</definedNames>` : ""}</workbook>`,
     "xl/_rels/workbook.xml.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets
+      .map(
+        (_, i) =>
+          `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`,
+      )
+      .join("")}<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
     "xl/styles.xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEFE6D2"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="top"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`,
-    "xl/worksheets/sheet1.xml": sheet,
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEFE6D2"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="top"/></xf><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="top"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`,
   };
+  sheets.forEach((sheet, i) => (files[`xl/worksheets/sheet${i + 1}.xml`] = sheetXml(sheet)));
   return zip(Object.entries(files).map(([name, text]) => ({ name, data: new TextEncoder().encode(text) })));
 }
 

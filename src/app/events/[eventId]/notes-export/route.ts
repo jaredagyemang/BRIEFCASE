@@ -1,4 +1,4 @@
-import { eventNotesXlsx, exportFileName, XLSX_TYPE, type ExportPlayer } from "@/lib/note-export";
+import { eventNotesXlsx, exportFileName, validTimeZone, XLSX_TYPE, type ExportPlayer } from "@/lib/note-export";
 import { createAuthedClient } from "@/lib/supabase/server";
 
 // Every note from an event (typed, voice and handwritten) as an Excel file.
@@ -107,14 +107,4 @@ export async function GET(request: Request, { params }: RouteContext<"/events/[e
       "Cache-Control": "private, no-store",
     },
   });
-}
-
-function validTimeZone(tz: string | null) {
-  if (!tz) return "UTC";
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: tz });
-    return tz;
-  } catch {
-    return "UTC";
-  }
 }
