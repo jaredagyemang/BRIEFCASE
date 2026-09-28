@@ -18,6 +18,7 @@ type SearchResult = Pick<Player, "id" | "first_name" | "last_name" | "grad_year"
 export default async function EventsPage({ searchParams }: PageProps<"/events">) {
   const params = await searchParams;
   const q = typeof params.q === "string" ? params.q.trim() : "";
+  const passwordUpdated = params.password === "updated";
   const supabase = await createClient();
 
   const { data: events } = await supabase
@@ -36,6 +37,12 @@ export default async function EventsPage({ searchParams }: PageProps<"/events">)
         Showcases/<wbr />
         Tournaments
       </h1>
+
+      {passwordUpdated && (
+        <p role="status" className="mt-4 rounded-2xl bg-green/15 px-4 py-3 text-sm font-medium">
+          ✅ Password updated. You’re signed in.
+        </p>
+      )}
 
       <Link
         href="/events/new"

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { signIn } from "./actions";
 import { BrandLogo } from "@/components/brand-logo";
@@ -48,6 +49,9 @@ export default function LoginPage() {
           {pending ? "Signing in…" : "Sign in"}
         </button>
       </form>
+      <Link href="/forgot-password" className="mt-5 self-center text-sm font-semibold text-accent-ink">
+        Forgot password?
+      </Link>
     </div>
   );
 }
