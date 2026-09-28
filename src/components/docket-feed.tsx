@@ -463,7 +463,7 @@ export function SingleCard({
   canSend,
   canDelete,
   coachName,
-  fromSearch,
+  fromList,
 }: {
   initial: DocketEmail;
   card: CardStatus;
@@ -471,7 +471,7 @@ export function SingleCard({
   canSend: boolean;
   canDelete: boolean;
   coachName: string;
-  fromSearch: boolean;
+  fromList: boolean;
 }) {
   const router = useRouter();
   const [email, setEmail] = useState(initial);
@@ -522,7 +522,7 @@ export function SingleCard({
   }, []);
 
   function back() {
-    if (fromSearch && window.history.length > 1) router.back();
+    if (fromList && window.history.length > 1) router.back();
     else router.push("/docket");
   }
 

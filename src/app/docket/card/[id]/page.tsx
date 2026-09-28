@@ -6,7 +6,8 @@ import { loadDocketCard } from "@/lib/gmail/docket";
 import { getCurrentUser } from "@/lib/staff";
 
 // One player's Info card and video(s) on their own, opened from The Docket's
-// search. ?from=search makes ‹ Back return to the search as it was.
+// search or team activity. ?from=search or ?from=activity makes ‹ Back return
+// there as it was.
 export default async function DocketCardPage({ params, searchParams }: PageProps<"/docket/card/[id]">) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const [result, user] = await Promise.all([loadDocketCard(id), getCurrentUser()]);
@@ -21,7 +22,7 @@ export default async function DocketCardPage({ params, searchParams }: PageProps
         canSend={result.canSend}
         canDelete={result.canDelete}
         coachName={user?.name ?? "Coach"}
-        fromSearch={query.from === "search"}
+        fromList={query.from === "search" || query.from === "activity"}
       />
     );
   }

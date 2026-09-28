@@ -120,3 +120,28 @@ export function cleanSearch(q: string) {
     .trim()
     .slice(0, 60);
 }
+
+// --- Team activity ------------------------------------------------------------------
+
+export type ActivityAction = "shortlisted" | "unshortlisted" | "shared" | "unshared" | "replied";
+
+// One line of team activity: only the fact that it happened, never anything
+// from the email.
+export type ActivityEntry = {
+  id: string;
+  // The coach who did it ("You" for the signed-in coach).
+  actor: string;
+  action: ActivityAction;
+  template: ReplyTemplate | null;
+  player: string | null;
+  note: string | null;
+  at: string;
+  // Where tapping it goes: this coach's own Info card, or the entry's page.
+  href: string;
+};
+
+export type ActivityPage =
+  | { status: "ok"; entries: ActivityEntry[]; more: boolean }
+  | { status: "error"; message: string };
+
+export const ACTIVITY_PAGE_SIZE = 20;
