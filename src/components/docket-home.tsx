@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { FeedMenu, StatePage } from "@/components/docket-feed";
 import { DocketSearch } from "@/components/docket-search";
+import { TeamActivity } from "@/components/team-activity";
 import { useDocket } from "@/components/use-docket";
 import { DEFAULT_RANGE, RANGES, inRange, rangeFor, type RangeId } from "@/lib/gmail/docket-types";
 
@@ -35,7 +36,8 @@ function saveRange(id: RangeId) {
 
 // The Docket's home screen: search for a player, or pick a time range, see
 // how many players there are to review in it (updating live as the AI reads
-// new emails), then start reviewing, or jump straight to the Shortlist.
+// new emails), then start reviewing, or jump straight to the Shortlist; and
+// the team's activity in that range.
 export function DocketHome({ connectedEmail, notice }: { connectedEmail: string; notice?: string }) {
   const { result, loading, reload, failed } = useDocket(connectedEmail);
   const range = rangeFor(useSyncExternalStore(subscribeRange, readRange, () => DEFAULT_RANGE));
@@ -189,6 +191,8 @@ export function DocketHome({ connectedEmail, notice }: { connectedEmail: string;
               View Shortlist
             </Link>
           </div>
+
+          <TeamActivity connectedEmail={connectedEmail} hours={range.hours} phrase={range.phrase} />
         </DocketSearch>
       </div>
     </div>
