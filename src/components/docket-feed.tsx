@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   deleteEmailAction,
   disconnectGmail,
+  extractInfoCardsAction,
   sendReplyAction,
   shareAction,
   shortlistAction,
@@ -19,6 +21,7 @@ import {
   REPLY_TEMPLATES,
   inRange,
   rangeFor,
+  type CardStatus,
   type DocketEmail,
   type InfoField,
   type RangeId,
@@ -286,49 +289,7 @@ function Feed({
     });
   }
 
-  function toggleShortlist(email: DocketEmail) {
-    const next = !email.shortlisted;
-    updateEmail(email.id, { shortlisted: next });
-    setToast({ message: next ? "Added to the Shortlist" : "Removed from the Shortlist" });
-    shortlistAction(email.id, next).catch(() => {
-      updateEmail(email.id, { shortlisted: !next });
-      setToast({ message: "Couldn’t update the Shortlist. Try again." });
-    });
-  }
-
-  // Share / un-share, one at a time per email, so a quick Share → Undo can't
-  // land in the wrong order.
-  const shareQueue = useRef(new Map<string, Promise<unknown>>());
-  function setSharedOnServer(email: DocketEmail, shared: boolean, failMessage: string, note?: string) {
-    const previous = shareQueue.current.get(email.id) ?? Promise.resolve();
-    const next = previous
-      .catch(() => {})
-      .then(() => shareAction(email.id, shared, note))
-      .catch(() => {
-        updateEmail(email.id, { shared: !shared });
-        setToast({ message: failMessage });
-      });
-    shareQueue.current.set(email.id, next);
-  }
-
-  function share(email: DocketEmail, note: string) {
-    updateEmail(email.id, { shared: true });
-    setToast({
-      message: "Shared with team",
-      undo: () => {
-        setToast(null);
-        updateEmail(email.id, { shared: false });
-        setSharedOnServer(email, false, "Couldn’t undo. Try again.");
-      },
-    });
-    setSharedOnServer(email, true, "Couldn’t share it. Try again.", note);
-  }
-
-  function unshare(email: DocketEmail) {
-    updateEmail(email.id, { shared: false });
-    setToast({ message: "Removed from Shared with team" });
-    setSharedOnServer(email, false, "Couldn’t update Shared with team. Try again.");
-  }
+  const { toggleShortlist, share, unshare } = useCardActions(updateEmail, setToast);
 
   function deleted(email: DocketEmail) {
     removeEmail(email.id);
@@ -469,7 +430,249 @@ type InfoProps = {
   onShare: (note: string) => void;
   onUnshare: () => void;
   onReplied: (template: ReplyTemplate) => void;
+  // Shown at the top of the card (e.g. why a card opened from search isn't
+  // in the feed).
+  statusNote?: string | null;
 };
+
+// --- One card on its own (opened from search) --------------------------------------
+
+// Why a card opened from search isn't (or is) in the feed.
+function statusNote(card: CardStatus, inTrash: boolean) {
+  if (inTrash) return "Deleted: it’s in your Gmail Trash.";
+  switch (card.kind) {
+    case "skipped":
+      return "Skipped: not in your feed.";
+    case "declined":
+      return `You replied “${TEMPLATE_LABEL[card.template]}”: not in your feed.`;
+    case "not_recruiting":
+      return "Not a recruiting email, so it’s not in your feed.";
+    case "older":
+      return "Older than your feed’s 30 days.";
+    default:
+      return null;
+  }
+}
+
+// A player's Info card and video(s) on their own, with the same actions as
+// in the feed, and a way back to where the coach came from.
+export function SingleCard({
+  initial,
+  card: initialCard,
+  inTrash,
+  canSend,
+  canDelete,
+  coachName,
+  fromSearch,
+}: {
+  initial: DocketEmail;
+  card: CardStatus;
+  inTrash: boolean;
+  canSend: boolean;
+  canDelete: boolean;
+  coachName: string;
+  fromSearch: boolean;
+}) {
+  const router = useRouter();
+  const [email, setEmail] = useState(initial);
+  const [card, setCard] = useState(initialCard);
+  const [trashed, setTrashed] = useState(inTrash);
+  const [toast, setToast] = useState<Toast | null>(null);
+  const [reading, setReading] = useState(!initial.info);
+  const [failed, setFailed] = useState(false);
+  const [col, setCol] = useState(0);
+  const media = useMemo(() => uniqueMedia(email.links), [email.links]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), toast.undo ? 5000 : 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  // Any change here also changes the feed: read it fresh next time.
+  function updateEmail(_id: string, patch: Partial<DocketEmail>) {
+    setEmail((e) => ({ ...e, ...patch }));
+    clearDocketCache();
+  }
+  const { toggleShortlist, share, unshare } = useCardActions(updateEmail, setToast);
+
+  // Found in Gmail but not read yet: read it now (state is only set once
+  // the read finishes, so this can start from an effect).
+  function startRead() {
+    extractInfoCardsAction([initial.id])
+      .catch(() => ({}) as Record<string, null>)
+      .then((cards) => {
+        const info = cards[initial.id];
+        setReading(false);
+        if (info) {
+          setEmail((e) => ({ ...e, info }));
+          if (info.recruiting === "no") setCard({ kind: "not_recruiting" });
+          clearDocketCache();
+        } else setFailed(true);
+      });
+  }
+  function readInfo() {
+    setReading(true);
+    setFailed(false);
+    startRead();
+  }
+  useEffect(() => {
+    if (!initial.info) startRead();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, for this email
+  }, []);
+
+  function back() {
+    if (fromSearch && window.history.length > 1) router.back();
+    else router.push("/docket");
+  }
+
+  function skip() {
+    const before = card;
+    setCard({ kind: "skipped" });
+    clearDocketCache();
+    skipAction(email.id, email.threadId, true).catch(() => {
+      setCard(before);
+      setToast({ message: "Couldn’t skip that. Try again." });
+    });
+    setToast({
+      message: "Skipped",
+      undo: () => {
+        setCard(before);
+        setToast(null);
+        skipAction(email.id, email.threadId, false).catch(() => setToast({ message: "Couldn’t undo. Try again." }));
+      },
+    });
+  }
+
+  function replied(template: ReplyTemplate) {
+    updateEmail(email.id, { replied: { template, at: new Date().toISOString() } });
+    if (DECLINING.includes(template)) setCard({ kind: "declined", template });
+    setToast({ message: "Reply sent" });
+  }
+
+  const note = statusNote(card, trashed);
+  const cardCount = 1 + media.length;
+
+  return (
+    <FeedShell>
+      <div className="h-full">
+        <PlayerRow
+          email={email}
+          media={media}
+          index={0}
+          total={1}
+          active
+          activeCol={col}
+          rowRef={() => {}}
+          onCol={setCol}
+          info={{
+            reading,
+            failed,
+            onRetry: readInfo,
+            canSend,
+            canDelete,
+            coachName,
+            onSkip: skip,
+            onDeleted: () => {
+              setTrashed(true);
+              clearDocketCache();
+              setToast({ message: "Deleted. It’s in your Gmail Trash." });
+            },
+            onShortlist: () => toggleShortlist(email),
+            onShare: (text) => share(email, text),
+            onUnshare: () => unshare(email),
+            onReplied: replied,
+            statusNote: note,
+          }}
+        />
+      </div>
+
+      <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent px-4 pt-3 pb-8">
+        <button type="button" onClick={back} className="pointer-events-auto w-14 text-left text-sm font-semibold text-accent">
+          ‹ Back
+        </button>
+        {cardCount > 1 && (
+          <div className="flex items-center gap-1.5" aria-label={`Card ${col + 1} of ${cardCount}`} role="img">
+            {Array.from({ length: cardCount }, (_, i) => (
+              <span
+                key={i}
+                className={`h-1.5 rounded-full transition-all ${i === col ? "w-4 bg-white" : "w-1.5 bg-white/40"}`}
+              />
+            ))}
+          </div>
+        )}
+        <span className="w-14" />
+      </div>
+
+      {toast && (
+        <div
+          role="status"
+          className="absolute inset-x-4 top-14 mx-auto flex max-w-md items-center justify-center gap-3 rounded-2xl bg-white/15 px-4 py-2.5 text-sm font-medium backdrop-blur-md"
+        >
+          <span>{toast.message}</span>
+          {toast.undo && (
+            <button type="button" onClick={toast.undo} className="font-semibold text-accent">
+              Undo
+            </button>
+          )}
+        </div>
+      )}
+    </FeedShell>
+  );
+}
+
+// Shortlist and Share to team from an Info card, used by the feed and by a
+// card opened on its own. Changes show at once and are undone on failure.
+function useCardActions(
+  updateEmail: (id: string, patch: Partial<DocketEmail>) => void,
+  setToast: (toast: Toast | null) => void,
+) {
+  function toggleShortlist(email: DocketEmail) {
+    const next = !email.shortlisted;
+    updateEmail(email.id, { shortlisted: next });
+    setToast({ message: next ? "Added to the Shortlist" : "Removed from the Shortlist" });
+    shortlistAction(email.id, next).catch(() => {
+      updateEmail(email.id, { shortlisted: !next });
+      setToast({ message: "Couldn’t update the Shortlist. Try again." });
+    });
+  }
+
+  // Share / un-share, one at a time per email, so a quick Share → Undo can't
+  // land in the wrong order.
+  const shareQueue = useRef(new Map<string, Promise<unknown>>());
+  function setSharedOnServer(email: DocketEmail, shared: boolean, failMessage: string, note?: string) {
+    const previous = shareQueue.current.get(email.id) ?? Promise.resolve();
+    const next = previous
+      .catch(() => {})
+      .then(() => shareAction(email.id, shared, note))
+      .catch(() => {
+        updateEmail(email.id, { shared: !shared });
+        setToast({ message: failMessage });
+      });
+    shareQueue.current.set(email.id, next);
+  }
+
+  function share(email: DocketEmail, note: string) {
+    updateEmail(email.id, { shared: true });
+    setToast({
+      message: "Shared with team",
+      undo: () => {
+        setToast(null);
+        updateEmail(email.id, { shared: false });
+        setSharedOnServer(email, false, "Couldn’t undo. Try again.");
+      },
+    });
+    setSharedOnServer(email, true, "Couldn’t share it. Try again.", note);
+  }
+
+  function unshare(email: DocketEmail) {
+    updateEmail(email.id, { shared: false });
+    setToast({ message: "Removed from Shared with team" });
+    setSharedOnServer(email, false, "Couldn’t update Shared with team. Try again.");
+  }
+
+  return { toggleShortlist, share, unshare };
+}
 
 // One player: their Info card, then their videos, side by side.
 function PlayerRow({
@@ -552,6 +755,7 @@ function InfoCard({
   onShare,
   onUnshare,
   onReplied,
+  statusNote,
 }: { email: DocketEmail; videoCount: number } & InfoProps) {
   const [replying, setReplying] = useState<ReplyTemplate | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -573,6 +777,11 @@ function InfoCard({
           {formatDate(email.date)}
           {info && <span className="ml-auto">Read by AI</span>}
         </p>
+        {statusNote && (
+          <p role="note" className="mt-3 rounded-xl bg-white/10 px-3 py-2 text-sm text-white/80" data-card-status>
+            {statusNote}
+          </p>
+        )}
         {info?.recruiting === "unsure" && (
           <p role="note" className="mt-3 rounded-xl bg-yellow/15 px-3 py-2 text-sm font-medium text-yellow">
             Not sure this is a recruiting email — review before acting.

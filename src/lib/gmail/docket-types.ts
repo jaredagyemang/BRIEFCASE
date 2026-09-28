@@ -73,3 +73,50 @@ export const inRange = (email: { date: string | null }, hours: number, now = Dat
 // Longest note a coach can add when sharing an Info card with the team (the
 // database allows the same).
 export const SHARE_NOTE_MAX = 500;
+
+// --- Search -----------------------------------------------------------------------
+
+// Where a card stands in this coach's Docket, shown on search results and on
+// a card opened from search.
+export type CardStatus =
+  | { kind: "feed" } // in the feed now
+  | { kind: "skipped" } // skipped (or deleted to Gmail Trash)
+  | { kind: "declined"; template: ReplyTemplate } // turned down with a reply
+  | { kind: "not_recruiting" } // the AI judged it not a recruiting email
+  | { kind: "older" }; // older than the feed's 30 days
+
+export type SearchResult = {
+  id: string;
+  // null until the AI has read the email (e.g. just found in Gmail).
+  info: DocketInfo | null;
+  from: string | null;
+  subject: string | null;
+  date: string | null;
+  status: CardStatus;
+  shortlisted: boolean;
+  shared: boolean;
+};
+
+// One card opened on its own (from search).
+export type CardResult =
+  | { status: "not_connected" }
+  | { status: "expired" }
+  | { status: "not_found" }
+  | { status: "error"; message: string }
+  | { status: "ok"; email: DocketEmail; card: CardStatus; inTrash: boolean; canSend: boolean; canDelete: boolean };
+
+export type GmailSearchResult =
+  | { status: "ok"; results: SearchResult[] }
+  | { status: "expired" }
+  | { status: "error"; message: string };
+
+// Search text as typed → safe to use in a database or Gmail query: letters,
+// numbers, spaces and a few name characters only.
+export function cleanSearch(q: string) {
+  return q
+    .normalize("NFC")
+    .replace(/[^\p{L}\p{N}\s'’.-]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60);
+}
