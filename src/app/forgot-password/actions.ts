@@ -1,8 +1,8 @@
 "use server";
 
+import { createClient } from "@supabase/supabase-js";
 import { headers } from "next/headers";
 import { isEmail } from "@/lib/form";
-import { createClient } from "@/lib/supabase/server";
 
 export type ForgotState = { sent: true; email: string } | { sent: false; error: string; email: string } | undefined;
 
@@ -13,13 +13,18 @@ export async function sendResetLink(_prev: ForgotState, formData: FormData): Pro
   const email = String(formData.get("email") ?? "").trim();
   if (!isEmail(email)) return { sent: false, error: "Enter the email you sign in with.", email };
 
-  // The link opens /reset-password on the address the coach is using
-  // (localhost, the live site or a preview). Supabase only sends people to
-  // addresses on its Redirect URLs list.
+  // The link opens /reset-password/callback on the address the coach is
+  // using (localhost, the live site or a preview). Supabase only sends
+  // people to addresses on its Redirect URLs list.
   const origin = (await headers()).get("origin") ?? "";
-  const supabase = await createClient();
+  // "implicit": the link signs the coach in by itself, so it works for its
+  // full hour and on any device. (The default "PKCE" flow only works in the
+  // browser that asked, within 5 minutes.)
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    auth: { flowType: "implicit", persistSession: false, autoRefreshToken: false },
+  });
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${origin}/reset-password`,
+    redirectTo: `${origin}/reset-password/callback`,
   });
   // Not shown: an unknown email, a request too soon after the last one, or
   // a mail problem all look the same to the coach.
