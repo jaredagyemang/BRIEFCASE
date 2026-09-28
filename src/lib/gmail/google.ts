@@ -131,6 +131,9 @@ export class GmailUnauthorizedError extends Error {}
 // The connection doesn't include a permission this needs (e.g. sending).
 export class GmailScopeError extends Error {}
 
+// The email no longer exists (e.g. permanently deleted in Gmail).
+export class GmailNotFoundError extends Error {}
+
 async function gmail<T>(path: string, accessToken: string, body?: unknown): Promise<T> {
   const res = await fetch(`${GMAIL_URL}${path}`, {
     method: body ? "POST" : "GET",
@@ -142,6 +145,7 @@ async function gmail<T>(path: string, accessToken: string, body?: unknown): Prom
   if (res.status === 403 && /insufficient|scope|permission/i.test(await res.clone().text().catch(() => ""))) {
     throw new GmailScopeError("This Gmail connection can't do that. Reconnect Gmail.");
   }
+  if (res.status === 404) throw new GmailNotFoundError("That email is no longer in Gmail.");
   if (!res.ok) {
     console.error("Gmail request failed", path.split("?")[0], res.status, await res.text().catch(() => ""));
     throw new Error("Couldn't read Gmail right now. Try again in a moment.");
@@ -155,7 +159,14 @@ export type GmailPart = {
   body?: { data?: string; size?: number };
   parts?: GmailPart[];
 };
-export type GmailMessage = { id: string; threadId: string; internalDate?: string; snippet?: string; payload?: GmailPart };
+export type GmailMessage = {
+  id: string;
+  threadId: string;
+  internalDate?: string;
+  snippet?: string;
+  labelIds?: string[];
+  payload?: GmailPart;
+};
 
 export async function listMessageIds(accessToken: string, query: string, max: number) {
   const params = new URLSearchParams({ q: query, maxResults: String(max) });
