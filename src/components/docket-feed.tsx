@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
-import { deleteEmailAction, disconnectGmail, sendReplyAction, shortlistAction, skipAction } from "@/app/docket/actions";
+import {
+  deleteEmailAction,
+  disconnectGmail,
+  sendReplyAction,
+  shareAction,
+  shortlistAction,
+  skipAction,
+} from "@/app/docket/actions";
 import { PageScroller } from "@/components/page-scroller";
 import { Sheet, SheetButton, SheetTitle } from "@/components/sheet";
 import { clearDocketCache, useDocket } from "@/components/use-docket";
@@ -288,6 +295,40 @@ function Feed({
     });
   }
 
+  // Share / un-share, one at a time per email, so a quick Share → Undo can't
+  // land in the wrong order.
+  const shareQueue = useRef(new Map<string, Promise<unknown>>());
+  function setSharedOnServer(email: DocketEmail, shared: boolean, failMessage: string) {
+    const previous = shareQueue.current.get(email.id) ?? Promise.resolve();
+    const next = previous
+      .catch(() => {})
+      .then(() => shareAction(email.id, shared))
+      .catch(() => {
+        updateEmail(email.id, { shared: !shared });
+        setToast({ message: failMessage });
+      });
+    shareQueue.current.set(email.id, next);
+  }
+
+  function share(email: DocketEmail) {
+    updateEmail(email.id, { shared: true });
+    setToast({
+      message: "Shared with team",
+      undo: () => {
+        setToast(null);
+        updateEmail(email.id, { shared: false });
+        setSharedOnServer(email, false, "Couldn’t undo. Try again.");
+      },
+    });
+    setSharedOnServer(email, true, "Couldn’t share it. Try again.");
+  }
+
+  function unshare(email: DocketEmail) {
+    updateEmail(email.id, { shared: false });
+    setToast({ message: "Removed from Shared with team" });
+    setSharedOnServer(email, false, "Couldn’t update Shared with team. Try again.");
+  }
+
   function deleted(email: DocketEmail) {
     removeEmail(email.id);
     setToast({ message: "Deleted. It’s in your Gmail Trash." });
@@ -359,6 +400,8 @@ function Feed({
               onSkip: () => skip(email),
               onDeleted: () => deleted(email),
               onShortlist: () => toggleShortlist(email),
+              onShare: () => share(email),
+              onUnshare: () => unshare(email),
               onReplied: (template) => replied(email, template),
             }}
           />
@@ -422,6 +465,8 @@ type InfoProps = {
   onSkip: () => void;
   onDeleted: () => void;
   onShortlist: () => void;
+  onShare: () => void;
+  onUnshare: () => void;
   onReplied: (template: ReplyTemplate) => void;
 };
 
@@ -503,10 +548,13 @@ function InfoCard({
   onSkip,
   onDeleted,
   onShortlist,
+  onShare,
+  onUnshare,
   onReplied,
 }: { email: DocketEmail; videoCount: number } & InfoProps) {
   const [replying, setReplying] = useState<ReplyTemplate | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [unsharing, setUnsharing] = useState(false);
   const info = email.info;
   const pending = !info && !failed;
 
@@ -594,7 +642,7 @@ function InfoCard({
               </button>
             ))}
           </div>
-          <div className="mt-2 grid grid-cols-3 gap-2">
+          <div className="mt-2 grid grid-cols-2 gap-2">
             <button
               type="button"
               onClick={onShortlist}
@@ -604,6 +652,19 @@ function InfoCard({
               }`}
             >
               {email.shortlisted ? "★ Shortlisted" : "☆ Shortlist"}
+            </button>
+            {/* Separate from the Shortlist: either, both, or neither. */}
+            <button
+              type="button"
+              onClick={email.shared ? () => setUnsharing(true) : onShare}
+              aria-pressed={email.shared}
+              className={`rounded-xl px-3 py-2.5 text-sm font-semibold ${
+                email.shared
+                  ? "bg-accent/15 text-accent ring-1 ring-accent/70 ring-inset"
+                  : "bg-white/10 active:bg-white/20"
+              }`}
+            >
+              {email.shared ? "✓ Shared with team" : "↗ Share to team"}
             </button>
             <button
               type="button"
@@ -628,6 +689,24 @@ function InfoCard({
         </div>
       </div>
 
+      {unsharing && (
+        <Sheet onClose={() => setUnsharing(false)}>
+          <SheetTitle
+            title="Remove from Shared with team?"
+            subtitle="Other coaches won’t see it in Shared with team anymore. It stays in your Docket, and on the Shortlist if it’s there."
+          />
+          <SheetButton
+            variant="danger"
+            onClick={() => {
+              setUnsharing(false);
+              onUnshare();
+            }}
+          >
+            Remove from Shared with team
+          </SheetButton>
+          <SheetButton onClick={() => setUnsharing(false)}>Cancel</SheetButton>
+        </Sheet>
+      )}
       {deleting && (
         <DeleteSheet
           email={email}
@@ -1034,6 +1113,13 @@ export function FeedMenu({
                 className="block w-full rounded-2xl bg-surface-muted py-3.5 text-center font-semibold"
               >
                 Shortlist
+              </Link>
+              <Link
+                href="/docket/shared"
+                onClick={close}
+                className="block w-full rounded-2xl bg-surface-muted py-3.5 text-center font-semibold"
+              >
+                Shared with team
               </Link>
               <SheetButton onClick={() => setConfirming(true)}>Disconnect Gmail</SheetButton>
               <SheetButton onClick={close}>Close</SheetButton>
