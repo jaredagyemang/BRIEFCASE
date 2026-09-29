@@ -1,8 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { ONBOARDED_COOKIE, onboardedMark, onboardingStep, safeNext, welcomePath } from "@/lib/onboarding";
 
-// Refreshes the Supabase session cookie on every request and sends
-// signed-out visitors to /login (except to the password reset screens).
+// Refreshes the Supabase session cookie on every request, sends signed-out
+// visitors to /login (except to the password reset screens), and sends
+// coaches who haven't finished first use (the terms, then the tutorial) there
+// first.
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -50,6 +53,34 @@ export async function updateSession(request: NextRequest) {
     url.pathname = "/events";
     url.search = "";
     return NextResponse.redirect(url);
+  }
+
+  // First use: the Privacy Policy and Terms of Use, then the tutorial.
+  const onWelcome = request.nextUrl.pathname.startsWith("/welcome");
+  if (signedIn && !onWelcome && !onPasswordReset) {
+    const userId = String(data!.claims.sub);
+    if (request.cookies.get(ONBOARDED_COOKIE)?.value !== onboardedMark(userId)) {
+      let step;
+      try {
+        step = await onboardingStep(supabase, userId);
+      } catch (error) {
+        console.error("Checking first use failed", error);
+        step = "terms" as const;
+      }
+      if (step !== "done") {
+        const url = request.nextUrl.clone();
+        const next = safeNext(request.nextUrl.pathname + request.nextUrl.search);
+        const target = new URL(welcomePath(step, next), url);
+        return NextResponse.redirect(target);
+      }
+      response.cookies.set(ONBOARDED_COOKIE, onboardedMark(userId), {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: request.nextUrl.protocol === "https:",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 365,
+      });
+    }
   }
 
   return response;

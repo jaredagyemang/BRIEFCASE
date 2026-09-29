@@ -2,6 +2,7 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { landingPath } from "@/lib/onboarding";
 import { VERIFIED_COOKIE, VERIFIED_COOKIE_OPTIONS } from "@/lib/password-reset";
 import { createClient } from "@/lib/supabase/server";
 
@@ -54,5 +55,6 @@ export async function setNewPassword(_prev: ResetState, formData: FormData): Pro
   }
 
   cookieStore.delete({ name: VERIFIED_COOKIE, path: "/reset-password" });
-  redirect("/events?password=updated");
+  // First use (the terms, then the tutorial) if it isn't finished.
+  redirect(await landingPath(supabase, "/events?password=updated"));
 }
