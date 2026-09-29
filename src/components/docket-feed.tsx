@@ -774,6 +774,11 @@ function InfoCard({
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
         <p className="flex items-center gap-2 text-xs text-white/60">
           <span className="rounded-full bg-accent px-2 py-0.5 font-semibold text-accent-foreground">Info</span>
+          {email.inSpam && (
+            <span className="rounded-full bg-yellow/20 px-2 py-0.5 font-semibold text-yellow" data-found-in-spam>
+              Found in Spam
+            </span>
+          )}
           {formatDate(email.date)}
           {info && <span className="ml-auto">Read by AI</span>}
         </p>

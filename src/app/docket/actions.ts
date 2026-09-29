@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { disconnect } from "@/lib/gmail/connection";
 import {
   SNAPSHOT_TABLE,
+  checkSpamEmails,
   extractInfoCards,
   loadDocket,
   sendReply,
@@ -19,8 +20,12 @@ import { createAuthedClient } from "@/lib/supabase/server";
 // The Docket's server actions. Gmail tokens and email contents stay on the
 // server; the screens only get what they show.
 
-export async function loadDocketAction() {
-  return loadDocket();
+export async function loadDocketAction(options?: { spam?: boolean }) {
+  return loadDocket({ spam: options?.spam === true });
+}
+
+export async function checkSpamAction(messageIds: string[]) {
+  return checkSpamEmails(Array.isArray(messageIds) ? messageIds.filter((id) => typeof id === "string") : []);
 }
 
 export async function extractInfoCardsAction(messageIds: string[]) {

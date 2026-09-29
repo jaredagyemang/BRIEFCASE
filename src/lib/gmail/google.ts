@@ -168,8 +168,11 @@ export type GmailMessage = {
   payload?: GmailPart;
 };
 
-export async function listMessageIds(accessToken: string, query: string, max: number) {
+// includeSpamTrash: also look in Spam and Trash (Gmail leaves them out
+// otherwise; "in:spam" in the query then narrows it to Spam).
+export async function listMessageIds(accessToken: string, query: string, max: number, includeSpamTrash = false) {
   const params = new URLSearchParams({ q: query, maxResults: String(max) });
+  if (includeSpamTrash) params.set("includeSpamTrash", "true");
   const json = await gmail<{ messages?: { id: string }[] }>(`/users/me/messages?${params}`, accessToken);
   return (json.messages ?? []).map((m) => m.id);
 }
