@@ -45,7 +45,7 @@ export function TermsGate({
       <div className="mx-auto w-full max-w-2xl px-4 pt-6 pb-3">
         {draft && (
           <p
-            className="mb-3 inline-block rounded-full bg-yellow/20 px-3 py-1 text-xs font-semibold text-yellow"
+            className="mb-3 inline-block rounded-full bg-yellow/20 px-3 py-1 text-xs font-semibold text-yellow-700 dark:text-yellow"
             data-legal-draft
           >
             Draft — under legal review
