@@ -92,7 +92,7 @@ export function AppNav() {
   }, [pathname]);
 
   // Signed-out screens have no header or mode switcher.
-  if (["/login", "/forgot-password", "/reset-password"].some((p) => pathname.startsWith(p))) return null;
+  if (["/login", "/forgot-password", "/reset-password", "/welcome"].some((p) => pathname.startsWith(p))) return null;
 
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     suppressClick.current = false;

@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { landingPath } from "@/lib/onboarding";
 import { createClient } from "@/lib/supabase/server";
 
 export type LoginState = { error: string; email: string } | undefined;
@@ -19,7 +20,8 @@ export async function signIn(
   if (error) {
     return { error: "That email and password didn't match.", email };
   }
-  redirect("/events");
+  // First use (the terms, then the tutorial) if it isn't finished.
+  redirect(await landingPath(supabase, "/events"));
 }
 
 export async function signOut() {
