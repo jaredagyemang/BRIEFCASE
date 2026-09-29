@@ -46,6 +46,10 @@ export const MAX_EMAILS = 100;
 // actual links (search matches loosely, e.g. a mention of "youtube.com").
 const LINK_SITES = "{youtube.com youtu.be hudl.com veo.co docs.google.com}";
 const SEARCH = `newer_than:${LOOKBACK_DAYS}d ${LINK_SITES}`;
+// "Also check Spam": the same search in Spam, with its own limit so Spam
+// can't crowd out the inbox.
+const SPAM_SEARCH = `in:spam newer_than:${LOOKBACK_DAYS}d ${LINK_SITES}`;
+export const MAX_SPAM_EMAILS = 50;
 const ITEM_COLUMNS = "gmail_message_id, extraction, skipped_at, replied_at, reply_template, sender_name, email_date";
 
 type ItemRow = {
@@ -112,6 +116,37 @@ async function listFlags(supabase: Supabase, staffId: string, ids: string[]) {
   };
 }
 
+// An email as The Docket shows it.
+function toEmail(
+  m: GmailMessage,
+  item: ItemRow | undefined,
+  flags: { shortlisted: Set<string>; shared: Set<string> },
+): DocketEmail {
+  return {
+    id: m.id,
+    threadId: m.threadId,
+    ...describe(m),
+    links: extractLinks(bodyText(m.payload)),
+    // Cards saved before the recruiting check existed get read again.
+    info: isCurrentInfo(item?.extraction) ? item.extraction : null,
+    replied: item?.replied_at && item.reply_template ? { template: item.reply_template, at: item.replied_at } : null,
+    shortlisted: flags.shortlisted.has(m.id),
+    shared: flags.shared.has(m.id),
+    inSpam: (m.labelIds ?? []).includes("SPAM"),
+  };
+}
+
+// In the feed: has film, and isn't skipped or deleted, turned down with a
+// reply, or not a recruiting email at all.
+function inFeed(e: DocketEmail, item: ItemRow | undefined) {
+  return (
+    e.links.length > 0 &&
+    !item?.skipped_at &&
+    !(item?.reply_template && DECLINING.includes(item.reply_template)) &&
+    e.info?.recruiting !== "no"
+  );
+}
+
 function failure(error: unknown): DocketResult {
   if (error instanceof ConnectionExpiredError) return { status: "expired" };
   console.error("Reading Gmail failed", error);
@@ -120,13 +155,21 @@ function failure(error: unknown): DocketResult {
 
 // --- The feed ------------------------------------------------------------------
 
-export async function loadDocket(): Promise<DocketResult> {
+// spam: also check Spam ("Also check Spam" on The Docket's home). Emails
+// from Spam are only included once the AI has judged them recruiting (or
+// unsure); until then only their ids and dates are returned (spamPending), to
+// be checked with checkSpamEmails. Nothing else from Spam leaves the server.
+export async function loadDocket({ spam = false }: { spam?: boolean } = {}): Promise<DocketResult> {
   const connection = await loadConnection();
   if (!connection) return { status: "not_connected" };
   const { supabase, row } = connection;
   try {
     const messages = await withGmail(connection, async (token) => {
-      const ids = await listMessageIds(token, SEARCH, MAX_EMAILS);
+      const [inbox, fromSpam] = await Promise.all([
+        listMessageIds(token, SEARCH, MAX_EMAILS),
+        spam ? listMessageIds(token, SPAM_SEARCH, MAX_SPAM_EMAILS, true) : Promise.resolve([]),
+      ]);
+      const ids = [...new Set([...inbox, ...fromSpam])];
       return inBatches(ids, 10, (id) => getMessage(token, id));
     });
     const ids = messages.map((m) => m.id);
@@ -160,33 +203,12 @@ export async function loadDocket(): Promise<DocketResult> {
       messages.filter((m) => byId.has(m.id) && !byId.get(m.id)!.sender_name),
     );
 
-    const emails = messages
-      .map((m): DocketEmail => {
-        const item = byId.get(m.id);
-        return {
-          id: m.id,
-          threadId: m.threadId,
-          ...describe(m),
-          links: extractLinks(bodyText(m.payload)),
-          // Cards saved before the recruiting check existed get read again.
-          info: isCurrentInfo(item?.extraction) ? item.extraction : null,
-          replied: item?.replied_at && item.reply_template ? { template: item.reply_template, at: item.replied_at } : null,
-          shortlisted: onShortlist.has(m.id),
-          shared: onShared.has(m.id),
-        };
-      })
-      .filter((e) => {
-        const item = byId.get(e.id);
-        // Skipped or deleted, turned down with a reply, or not a recruiting
-        // email at all: out of The Docket.
-        return (
-          e.links.length > 0 &&
-          !item?.skipped_at &&
-          !(item?.reply_template && DECLINING.includes(item.reply_template)) &&
-          e.info?.recruiting !== "no"
-        );
-      })
-      .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
+    const all = messages
+      .map((m) => toEmail(m, byId.get(m.id), { shortlisted: onShortlist, shared: onShared }))
+      .filter((e) => inFeed(e, byId.get(e.id)));
+    // From Spam and not read by the AI yet: only the id and date for now.
+    const spamPending = all.filter((e) => e.inSpam && !e.info).map((e) => ({ id: e.id, date: e.date }));
+    const emails = all.filter((e) => !e.inSpam || e.info).sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
 
     return {
       status: "ok",
@@ -194,6 +216,7 @@ export async function loadDocket(): Promise<DocketResult> {
       canSend: row.scopes.split(" ").includes(GMAIL_SEND),
       canDelete: row.scopes.split(" ").includes(GMAIL_MODIFY),
       emails,
+      spamPending,
       scanned: messages.length,
     };
   } catch (error) {
@@ -205,7 +228,11 @@ export async function loadDocket(): Promise<DocketResult> {
 
 // Reads the given emails with the AI and saves the Info cards (each email is
 // only ever read once). Returns each card, or null where reading failed.
-export async function extractInfoCards(messageIds: string[]): Promise<Record<string, DocketInfo | null>> {
+// `fetched`: emails already read from Gmail (so they aren't fetched again).
+export async function extractInfoCards(
+  messageIds: string[],
+  fetched?: Map<string, GmailMessage>,
+): Promise<Record<string, DocketInfo | null>> {
   const connection = await loadConnection();
   if (!connection) return {};
   const { supabase, row } = connection;
@@ -226,7 +253,7 @@ export async function extractInfoCards(messageIds: string[]): Promise<Record<str
   await Promise.all(
     todo.map(async (id) => {
       try {
-        const message = await withGmail(connection, (token) => getMessage(token, id));
+        const message = fetched?.get(id) ?? (await withGmail(connection, (token) => getMessage(token, id)));
         const { from, fromEmail, subject, date } = describe(message);
         const info = await extractInfo({
           from: fromEmail ? `${from} <${fromEmail}>` : from,
@@ -252,6 +279,45 @@ export async function extractInfoCards(messageIds: string[]): Promise<Record<str
     }),
   );
   return result;
+}
+
+// "Also check Spam": reads emails from Spam with the AI (up to 8 at a time,
+// like extractInfoCards) and returns only the ones judged recruiting or
+// unsure, ready to show. Everything else stays on the server; so does
+// anything no longer in Spam or no longer eligible.
+export async function checkSpamEmails(messageIds: string[]): Promise<DocketEmail[]> {
+  const connection = await loadConnection();
+  if (!connection) return [];
+  const { supabase, row } = connection;
+  const ids = [...new Set(messageIds)].filter((id) => /^[\w-]{1,64}$/.test(id)).slice(0, 8);
+  if (!ids.length) return [];
+  let messages: GmailMessage[];
+  try {
+    const found = await withGmail(connection, (token) =>
+      Promise.all(ids.map((id) => getMessage(token, id).catch(() => null))),
+    );
+    messages = found.filter((m): m is GmailMessage => Boolean(m && (m.labelIds ?? []).includes("SPAM")));
+  } catch (error) {
+    console.error("Checking Spam failed", error);
+    return [];
+  }
+  if (!messages.length) return [];
+  const cards = await extractInfoCards(
+    messages.map((m) => m.id),
+    new Map(messages.map((m) => [m.id, m])),
+  );
+  const { data: items } = await supabase
+    .from("docket_items")
+    .select(ITEM_COLUMNS)
+    .eq("staff_id", row.staff_id)
+    .in("gmail_message_id", messages.map((m) => m.id))
+    .returns<ItemRow[]>();
+  const byId = new Map((items ?? []).map((i) => [i.gmail_message_id, i]));
+  const flags = await listFlags(supabase, row.staff_id, messages.map((m) => m.id));
+  return messages
+    .filter((m) => cards[m.id] && cards[m.id]!.recruiting !== "no")
+    .map((m) => toEmail(m, byId.get(m.id), flags))
+    .filter((e) => e.info && inFeed(e, byId.get(e.id)));
 }
 
 // --- Skip -----------------------------------------------------------------------
@@ -551,16 +617,7 @@ export async function loadDocketCard(messageId: string): Promise<CardResult> {
       .maybeSingle<ItemRow>();
     if (!item?.sender_name) await saveDetails(supabase, row.staff_id, [message]);
     const flags = await listFlags(supabase, row.staff_id, [messageId]);
-    const email: DocketEmail = {
-      id: message.id,
-      threadId: message.threadId,
-      ...describe(message),
-      links: extractLinks(bodyText(message.payload)),
-      info: isCurrentInfo(item?.extraction) ? item.extraction : null,
-      replied: item?.replied_at && item.reply_template ? { template: item.reply_template, at: item.replied_at } : null,
-      shortlisted: flags.shortlisted.has(messageId),
-      shared: flags.shared.has(messageId),
-    };
+    const email = toEmail(message, item ?? undefined, flags);
     return {
       status: "ok",
       email,

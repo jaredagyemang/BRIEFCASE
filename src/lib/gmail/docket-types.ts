@@ -48,13 +48,25 @@ export type DocketEmail = {
   shortlisted: boolean;
   // On "Shared with team" (separate from the Shortlist).
   shared: boolean;
+  // In Gmail's Spam ("Also check Spam"), shown as "Found in Spam".
+  inSpam: boolean;
 };
 
 export type DocketResult =
   | { status: "not_connected" }
   | { status: "expired" }
   | { status: "error"; message: string }
-  | { status: "ok"; googleEmail: string; canSend: boolean; canDelete: boolean; emails: DocketEmail[]; scanned: number };
+  | {
+      status: "ok";
+      googleEmail: string;
+      canSend: boolean;
+      canDelete: boolean;
+      emails: DocketEmail[];
+      // From Spam, still to be checked by the AI (see checkSpamEmails): only
+      // the id and date until then.
+      spamPending: { id: string; date: string | null }[];
+      scanned: number;
+    };
 
 // The Docket's time ranges (all within the 30 days read from Gmail).
 export const RANGES = [

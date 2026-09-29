@@ -1,13 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { extractInfoCardsAction, loadDocketAction } from "@/app/docket/actions";
+import { checkSpamAction, extractInfoCardsAction, loadDocketAction } from "@/app/docket/actions";
+import { checkSpamNow, useCheckSpam } from "@/components/docket-settings";
 import type { DocketEmail, DocketResult } from "@/lib/gmail/docket-types";
 
 // The last result, kept while the app is open so flipping back to The Docket
 // shows the feed straight away instead of reading Gmail again. Tied to the
-// connected address, so a different account never sees someone else's feed.
-let cache: { email: string; at: number; result: DocketResult } | null = null;
+// connected address, so a different account never sees someone else's feed,
+// and to "Also check Spam" being on or off.
+let cache: { email: string; spam: boolean; at: number; result: DocketResult } | null = null;
 const FRESH_FOR = 2 * 60 * 1000;
 
 export function clearDocketCache() {
@@ -19,9 +21,13 @@ export function clearDocketCache() {
 const EXTRACT_BATCH = 8;
 
 export function useDocket(connectedEmail: string) {
+  const spam = useCheckSpam();
   const [result, setResultState] = useState<DocketResult | null>(() =>
-    cache?.email === connectedEmail ? cache.result : null,
+    cache?.email === connectedEmail && cache.spam === checkSpamNow() ? cache.result : null,
   );
+  // The latest load, so a slower earlier one (e.g. before Spam was turned
+  // on) can't overwrite it.
+  const latest = useRef(0);
   const [loading, startLoading] = useTransition();
   // Emails the AI is reading right now, and ones it couldn't read.
   const [reading, setReading] = useState<Set<string>>(new Set());
@@ -32,7 +38,10 @@ export function useDocket(connectedEmail: string) {
     (next: DocketResult | ((prev: DocketResult | null) => DocketResult | null)) => {
       setResultState((prev) => {
         const value = typeof next === "function" ? next(prev) : next;
-        cache = value?.status === "ok" ? { email: connectedEmail, at: cache?.at ?? Date.now(), result: value } : null;
+        cache =
+          value?.status === "ok"
+            ? { email: connectedEmail, spam: cache?.spam ?? checkSpamNow(), at: cache?.at ?? Date.now(), result: value }
+            : null;
         return value;
       });
     },
@@ -40,27 +49,64 @@ export function useDocket(connectedEmail: string) {
   );
 
   function reload() {
+    load(checkSpamNow());
+  }
+
+  function load(withSpam: boolean) {
+    const request = ++latest.current;
     startLoading(async () => {
-      const next = await loadDocketAction().catch(
+      const next = await loadDocketAction({ spam: withSpam }).catch(
         (): DocketResult => ({ status: "error", message: "Couldn’t reach the server. Check your connection." }),
       );
+      if (request !== latest.current) return;
       attempted.current.clear();
       setFailed(new Set());
-      cache = next.status === "ok" ? { email: connectedEmail, at: Date.now(), result: next } : null;
+      cache = next.status === "ok" ? { email: connectedEmail, spam: withSpam, at: Date.now(), result: next } : null;
       setResultState(next);
     });
   }
 
+  // Load once per visit, and again when "Also check Spam" is switched.
   useEffect(() => {
-    if (!cache || cache.email !== connectedEmail || Date.now() - cache.at > FRESH_FOR) reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per visit
-  }, [connectedEmail]);
+    if (spam === null) return;
+    if (!cache || cache.email !== connectedEmail || cache.spam !== spam || Date.now() - cache.at > FRESH_FOR) {
+      load(spam);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
+  }, [connectedEmail, spam]);
 
   // Fill in Info cards the AI hasn't read yet, a few at a time.
   useEffect(() => {
     if (result?.status !== "ok" || reading.size > 0) return;
     const next = result.emails.filter((e) => !e.info && !attempted.current.has(e.id)).slice(0, EXTRACT_BATCH);
-    if (next.length === 0) return;
+    if (next.length === 0) {
+      // Then emails from Spam: they only arrive if the AI judged them
+      // recruiting (or unsure). Ones it didn't simply drop out of the list.
+      const spamIds = result.spamPending
+        .filter((p) => !attempted.current.has(p.id))
+        .slice(0, EXTRACT_BATCH)
+        .map((p) => p.id);
+      if (spamIds.length === 0) return;
+      spamIds.forEach((id) => attempted.current.add(id));
+      setReading(new Set(spamIds));
+      checkSpamAction(spamIds)
+        .catch(() => [])
+        .then((found) => {
+          setResult((prev) =>
+            prev?.status === "ok"
+              ? {
+                  ...prev,
+                  emails: [...prev.emails, ...found.filter((f) => !prev.emails.some((e) => e.id === f.id))].sort(
+                    (a, b) => (b.date ?? "").localeCompare(a.date ?? ""),
+                  ),
+                  spamPending: prev.spamPending.filter((p) => !spamIds.includes(p.id)),
+                }
+              : prev,
+          );
+          setReading(new Set());
+        });
+      return;
+    }
     const ids = next.map((e) => e.id);
     ids.forEach((id) => attempted.current.add(id));
     setReading(new Set(ids));

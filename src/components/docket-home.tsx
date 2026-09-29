@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { FeedMenu, StatePage } from "@/components/docket-feed";
 import { DocketSearch } from "@/components/docket-search";
+import { saveCheckSpam, useCheckSpam } from "@/components/docket-settings";
 import { TeamActivity } from "@/components/team-activity";
 import { useDocket } from "@/components/use-docket";
 import { DEFAULT_RANGE, RANGES, inRange, rangeFor, type RangeId } from "@/lib/gmail/docket-types";
@@ -97,7 +98,9 @@ export function DocketHome({ connectedEmail, notice }: { connectedEmail: string;
   const inThisRange = emails.filter((e) => inRange(e, range.hours));
   // (Emails the AI couldn't read count too: they're shown with Try again.)
   const ready = inThisRange.filter((e) => (e.info ? e.info.recruiting !== "no" : failed.has(e.id))).length;
-  const checking = inThisRange.filter((e) => !e.info && !failed.has(e.id)).length;
+  // (Plus emails from Spam still being checked, when that's on.)
+  const spamChecking = result?.status === "ok" ? result.spamPending.filter((p) => inRange(p, range.hours)).length : 0;
+  const checking = inThisRange.filter((e) => !e.info && !failed.has(e.id)).length + spamChecking;
   const loaded = result?.status === "ok";
 
   return (
@@ -142,6 +145,7 @@ export function DocketHome({ connectedEmail, notice }: { connectedEmail: string;
               );
             })}
           </div>
+          <SpamToggle />
 
           <div className="mt-6 rounded-3xl bg-surface px-6 py-8 text-center" aria-live="polite">
             {!loaded ? (
@@ -195,6 +199,34 @@ export function DocketHome({ connectedEmail, notice }: { connectedEmail: string;
           <TeamActivity connectedEmail={connectedEmail} hours={range.hours} phrase={range.phrase} />
         </DocketSearch>
       </div>
+    </div>
+  );
+}
+
+// "Also check Spam": widens what's checked, not what's shown (only emails the
+// AI judges recruiting, or unsure, come through, marked "Found in Spam").
+function SpamToggle() {
+  const on = useCheckSpam() ?? false;
+  return (
+    <div className="mt-3 flex items-center justify-between gap-4 rounded-2xl bg-surface px-4 py-3">
+      <div className="min-w-0">
+        <p id="check-spam" className="font-semibold">
+          Also check Spam
+        </p>
+        <p className="text-xs text-muted">Only recruiting emails come through, marked “Found in Spam”.</p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-labelledby="check-spam"
+        onClick={() => saveCheckSpam(!on)}
+        className={`relative h-7 w-12 shrink-0 rounded-full transition ${on ? "bg-accent" : "bg-surface-muted"}`}
+      >
+        <span
+          className={`absolute top-1 left-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${on ? "translate-x-5" : ""}`}
+        />
+      </button>
     </div>
   );
 }
