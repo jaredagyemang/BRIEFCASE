@@ -8,7 +8,7 @@
 // Formatting: a blank line starts a new paragraph, "## " starts a heading and
 // "- " starts a bullet point.
 
-export const LEGAL_VERSION = "2026-09-29-draft";
+export const LEGAL_VERSION = "2026-09-29-draft-2";
 
 // Shows "Draft — under legal review" on the screen.
 export const LEGAL_DRAFT = true;
