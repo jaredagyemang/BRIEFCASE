@@ -98,4 +98,3 @@ Briefcase is provided "as is." We do our best to keep it accurate and available,
 
 We may update these terms as Briefcase changes. Continued use after an update means you accept the revised terms.
 `;
-EOF
