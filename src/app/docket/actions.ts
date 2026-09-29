@@ -68,4 +68,5 @@ export async function removeFromListAction(list: SnapshotList, id: string) {
 export async function disconnectGmail() {
   await disconnect();
   revalidatePath("/docket");
+  revalidatePath("/profile");
 }
