@@ -49,8 +49,8 @@ export function DocketFeed({
   if (!result) {
     return (
       <FeedShell>
-        <div className="flex h-full flex-col items-center justify-center gap-3 text-white/70" aria-busy="true">
-          <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/20 border-t-accent" />
+        <div className="flex h-full flex-col items-center justify-center gap-3 text-muted" aria-busy="true">
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-border border-t-accent" />
           <p className="text-sm">Reading your recent email…</p>
         </div>
       </FeedShell>
@@ -122,7 +122,7 @@ export function DocketFeed({
 
 // Dark, full-height backdrop for the feed and its loading state.
 function FeedShell({ children }: { children: React.ReactNode }) {
-  return <div className="relative h-full bg-black text-white">{children}</div>;
+  return <div className="relative h-full bg-background text-foreground">{children}</div>;
 }
 
 // The player you were on, so flipping to another mode and back returns to
@@ -312,16 +312,16 @@ function Feed({
         <div className="flex h-full flex-col items-center justify-center px-8 pb-28 text-center">
           {pendingInRange > 0 ? (
             <>
-              <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/20 border-t-accent" />
-              <p className="mt-4 text-white/80">Reading {pendingInRange} more {pendingInRange === 1 ? "email" : "emails"}…</p>
+              <div className="h-10 w-10 animate-spin rounded-full border-2 border-border border-t-accent" />
+              <p className="mt-4 text-foreground/80">Reading {pendingInRange} more {pendingInRange === 1 ? "email" : "emails"}…</p>
             </>
           ) : (
             <>
               <p className="text-lg font-semibold">All caught up</p>
-              <p className="mt-1 text-white/70">Nothing left to review from {phrase}.</p>
+              <p className="mt-1 text-muted">Nothing left to review from {phrase}.</p>
             </>
           )}
-          <Link href="/docket" className="mt-6 rounded-2xl bg-white/10 px-6 py-3 font-semibold">
+          <Link href="/docket" className="mt-6 rounded-2xl bg-surface-muted px-6 py-3 font-semibold">
             Back to The Docket
           </Link>
         </div>
@@ -371,12 +371,16 @@ function Feed({
       </div>
 
       {/* Top bar over the feed */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent px-4 pt-3 pb-8">
+      <div
+        className={`pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-background/90 to-transparent px-4 pt-3 pb-8 ${
+          activeCol > 0 ? "scheme-dark" : ""
+        }`}
+      >
         <p className="text-sm font-semibold">
-          <Link href="/docket" className="pointer-events-auto text-accent">
+          <Link href="/docket" className="pointer-events-auto text-accent-ink">
             ‹ The Docket
           </Link>
-          <span className="ml-2 text-white/70" aria-live="polite">
+          <span className="ml-2 text-muted" aria-live="polite">
             {row + 1} / {emails.length}
           </span>
         </p>
@@ -386,7 +390,7 @@ function Feed({
             {Array.from({ length: cardCount }, (_, i) => (
               <span
                 key={i}
-                className={`h-1.5 rounded-full transition-all ${i === activeCol ? "w-4 bg-white" : "w-1.5 bg-white/40"}`}
+                className={`h-1.5 rounded-full transition-all ${i === activeCol ? "w-4 bg-foreground" : "w-1.5 bg-foreground/40"}`}
               />
             ))}
           </div>
@@ -397,11 +401,11 @@ function Feed({
       {toast && (
         <div
           role="status"
-          className="absolute inset-x-4 top-14 mx-auto flex max-w-md items-center justify-center gap-3 rounded-2xl bg-white/15 px-4 py-2.5 text-sm font-medium backdrop-blur-md"
+          className="absolute inset-x-4 top-14 mx-auto flex max-w-md items-center justify-center gap-3 rounded-2xl bg-surface/90 px-4 py-2.5 text-sm font-medium text-foreground shadow-lg ring-1 ring-border backdrop-blur-md"
         >
           <span>{toast.message}</span>
           {toast.undo && (
-            <button type="button" onClick={toast.undo} className="font-semibold text-accent">
+            <button type="button" onClick={toast.undo} className="font-semibold text-accent-ink">
               Undo
             </button>
           )}
@@ -587,8 +591,12 @@ export function SingleCard({
         />
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent px-4 pt-3 pb-8">
-        <button type="button" onClick={back} className="pointer-events-auto w-14 text-left text-sm font-semibold text-accent">
+      <div
+        className={`pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-background/90 to-transparent px-4 pt-3 pb-8 ${
+          col > 0 ? "scheme-dark" : ""
+        }`}
+      >
+        <button type="button" onClick={back} className="pointer-events-auto w-14 text-left text-sm font-semibold text-accent-ink">
           ‹ Back
         </button>
         {cardCount > 1 && (
@@ -596,7 +604,7 @@ export function SingleCard({
             {Array.from({ length: cardCount }, (_, i) => (
               <span
                 key={i}
-                className={`h-1.5 rounded-full transition-all ${i === col ? "w-4 bg-white" : "w-1.5 bg-white/40"}`}
+                className={`h-1.5 rounded-full transition-all ${i === col ? "w-4 bg-foreground" : "w-1.5 bg-foreground/40"}`}
               />
             ))}
           </div>
@@ -607,11 +615,11 @@ export function SingleCard({
       {toast && (
         <div
           role="status"
-          className="absolute inset-x-4 top-14 mx-auto flex max-w-md items-center justify-center gap-3 rounded-2xl bg-white/15 px-4 py-2.5 text-sm font-medium backdrop-blur-md"
+          className="absolute inset-x-4 top-14 mx-auto flex max-w-md items-center justify-center gap-3 rounded-2xl bg-surface/90 px-4 py-2.5 text-sm font-medium text-foreground shadow-lg ring-1 ring-border backdrop-blur-md"
         >
           <span>{toast.message}</span>
           {toast.undo && (
-            <button type="button" onClick={toast.undo} className="font-semibold text-accent">
+            <button type="button" onClick={toast.undo} className="font-semibold text-accent-ink">
               Undo
             </button>
           )}
@@ -728,12 +736,12 @@ const FIELD_LABEL = { position: "Position", grad_year: "Grad year", club: "Club"
 
 // Blank when the email doesn't say; "Possibly …" when the AI only inferred it.
 function FieldValue({ field, large = false }: { field: InfoField; large?: boolean }) {
-  if (!field) return <span className="text-white/30">—</span>;
+  if (!field) return <span className="text-muted/60">—</span>;
   if (field.source === "stated") return <span>{field.value}</span>;
   return (
-    <span className="text-yellow">
+    <span className="text-yellow-700 dark:text-yellow">
       Possibly {field.value}
-      <span className={`block font-normal text-yellow/75 ${large ? "text-sm" : "text-xs"}`}>
+      <span className={`block font-normal text-yellow-700/80 dark:text-yellow/75 ${large ? "text-sm" : "text-xs"}`}>
         — verify, AI may be wrong
       </span>
     </span>
@@ -772,10 +780,10 @@ function InfoCard({
       className="flex h-full w-full shrink-0 snap-start snap-always flex-col overflow-y-auto px-4 pt-14 pb-[calc(7rem+env(safe-area-inset-bottom))]"
     >
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
-        <p className="flex items-center gap-2 text-xs text-white/60">
+        <p className="flex items-center gap-2 text-xs text-muted">
           <span className="rounded-full bg-accent px-2 py-0.5 font-semibold text-accent-foreground">Info</span>
           {email.inSpam && (
-            <span className="rounded-full bg-yellow/20 px-2 py-0.5 font-semibold text-yellow" data-found-in-spam>
+            <span className="rounded-full bg-yellow/20 px-2 py-0.5 font-semibold text-yellow-700 dark:text-yellow" data-found-in-spam>
               Found in Spam
             </span>
           )}
@@ -783,12 +791,12 @@ function InfoCard({
           {info && <span className="ml-auto">Read by AI</span>}
         </p>
         {statusNote && (
-          <p role="note" className="mt-3 rounded-xl bg-white/10 px-3 py-2 text-sm text-white/80" data-card-status>
+          <p role="note" className="mt-3 rounded-xl bg-surface-muted px-3 py-2 text-sm text-foreground/80" data-card-status>
             {statusNote}
           </p>
         )}
         {info?.recruiting === "unsure" && (
-          <p role="note" className="mt-3 rounded-xl bg-yellow/15 px-3 py-2 text-sm font-medium text-yellow">
+          <p role="note" className="mt-3 rounded-xl bg-yellow/15 px-3 py-2 text-sm font-medium text-yellow-700 dark:text-yellow">
             Not sure this is a recruiting email — review before acting.
           </p>
         )}
@@ -797,38 +805,38 @@ function InfoCard({
           {info?.name ? (
             <FieldValue field={info.name} large />
           ) : pending ? (
-            <span className="inline-block h-7 w-48 animate-pulse rounded-lg bg-white/10" aria-label="Reading…" />
+            <span className="inline-block h-7 w-48 animate-pulse rounded-lg bg-surface-muted" aria-label="Reading…" />
           ) : (
-            <span className="text-white/40">Name not in the email</span>
+            <span className="text-muted">Name not in the email</span>
           )}
         </h2>
-        <p className="mt-1 truncate text-sm text-white/70">
-          From <span className="font-medium text-white">{email.from}</span>
+        <p className="mt-1 truncate text-sm text-muted">
+          From <span className="font-medium text-foreground">{email.from}</span>
           {email.fromEmail && email.fromEmail !== email.from && <span> · {email.fromEmail}</span>}
         </p>
-        <p className="truncate text-sm text-white/50">{email.subject}</p>
+        <p className="truncate text-sm text-muted">{email.subject}</p>
 
         {pending && (
-          <p className="mt-3 text-sm text-white/60" aria-live="polite">
+          <p className="mt-3 text-sm text-muted" aria-live="polite">
             {reading ? "Reading the email…" : "Waiting to read the email…"}
           </p>
         )}
         {failed && !info && (
-          <p className="mt-3 text-sm text-white/70">
+          <p className="mt-3 text-sm text-muted">
             Couldn’t read this email automatically.{" "}
-            <button type="button" onClick={onRetry} className="font-semibold text-accent">
+            <button type="button" onClick={onRetry} className="font-semibold text-accent-ink">
               Try again
             </button>
           </p>
         )}
 
-        <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 rounded-2xl bg-white/5 p-4">
+        <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 rounded-2xl bg-surface p-4">
           {(Object.keys(FIELD_LABEL) as (keyof typeof FIELD_LABEL)[]).map((key) => (
             <div key={key} className="min-w-0">
-              <dt className="text-xs font-medium tracking-wide text-white/50 uppercase">{FIELD_LABEL[key]}</dt>
+              <dt className="text-xs font-medium tracking-wide text-muted uppercase">{FIELD_LABEL[key]}</dt>
               <dd className="mt-0.5 text-[15px] font-semibold break-words">
                 {pending ? (
-                  <span className="inline-block h-4 w-16 animate-pulse rounded bg-white/10" />
+                  <span className="inline-block h-4 w-16 animate-pulse rounded bg-surface-muted" />
                 ) : (
                   <FieldValue field={info?.[key] ?? null} />
                 )}
@@ -837,23 +845,23 @@ function InfoCard({
           ))}
         </dl>
         {info?.more_players && (
-          <p className="mt-2 text-xs text-white/60">This email mentions more players; this card shows the first.</p>
+          <p className="mt-2 text-xs text-muted">This email mentions more players; this card shows the first.</p>
         )}
 
         <div className="mt-auto pt-4">
           {email.replied && (
-            <p className="mb-2 text-sm text-white/70">
+            <p className="mb-2 text-sm text-muted">
               ✓ Replied “{TEMPLATE_LABEL[email.replied.template]}” · {formatDate(email.replied.at)}
             </p>
           )}
-          <p className="mb-1.5 text-xs font-medium tracking-wide text-white/50 uppercase">Reply</p>
+          <p className="mb-1.5 text-xs font-medium tracking-wide text-muted uppercase">Reply</p>
           <div className="grid grid-cols-2 gap-2">
             {REPLY_TEMPLATES.map((t) => (
               <button
                 key={t}
                 type="button"
                 onClick={() => setReplying(t)}
-                className="rounded-xl bg-white/10 px-3 py-2.5 text-sm font-semibold active:bg-white/20"
+                className="rounded-xl bg-surface-muted px-3 py-2.5 text-sm font-semibold active:bg-border"
               >
                 {TEMPLATE_LABEL[t]}
               </button>
@@ -865,7 +873,7 @@ function InfoCard({
               onClick={onShortlist}
               aria-pressed={email.shortlisted}
               className={`rounded-xl px-3 py-2.5 text-sm font-semibold ${
-                email.shortlisted ? "bg-accent text-accent-foreground" : "bg-white/10 active:bg-white/20"
+                email.shortlisted ? "bg-accent text-accent-foreground" : "bg-surface-muted active:bg-border"
               }`}
             >
               {email.shortlisted ? "★ Shortlisted" : "☆ Shortlist"}
@@ -877,8 +885,8 @@ function InfoCard({
               aria-pressed={email.shared}
               className={`rounded-xl px-3 py-2.5 text-sm font-semibold ${
                 email.shared
-                  ? "bg-accent/15 text-accent ring-1 ring-accent/70 ring-inset"
-                  : "bg-white/10 active:bg-white/20"
+                  ? "bg-accent/15 text-accent-ink ring-1 ring-accent/70 ring-inset"
+                  : "bg-surface-muted active:bg-border"
               }`}
             >
               {email.shared ? "✓ Shared with team" : "↗ Share to team"}
@@ -886,20 +894,20 @@ function InfoCard({
             <button
               type="button"
               onClick={onSkip}
-              className="rounded-xl bg-white/10 px-3 py-2.5 text-sm font-semibold text-white/80 active:bg-white/20"
+              className="rounded-xl bg-surface-muted px-3 py-2.5 text-sm font-semibold text-foreground/80 active:bg-border"
             >
               Skip
             </button>
             <button
               type="button"
               onClick={() => setDeleting(true)}
-              className="rounded-xl bg-white/10 px-3 py-2.5 text-sm font-semibold text-red active:bg-white/20"
+              className="rounded-xl bg-surface-muted px-3 py-2.5 text-sm font-semibold text-red active:bg-border"
             >
               Delete
             </button>
           </div>
           {videoCount > 0 && (
-            <p className="mt-3 text-center text-sm text-white/50">
+            <p className="mt-3 text-center text-sm text-muted">
               Swipe for {videoCount === 1 ? "their video" : `${videoCount} videos`} →
             </p>
           )}
@@ -1108,7 +1116,8 @@ function VideoCard({ email, link, active }: { email: DocketEmail; link: FoundLin
   return (
     <section
       aria-label={`${PLATFORM_LABEL[link.platform]} from ${email.from}`}
-      className="relative flex h-full w-full shrink-0 snap-start snap-always flex-col"
+      // Film always sits on black, in light mode too (like any video player).
+      className="relative flex h-full w-full shrink-0 snap-start snap-always flex-col bg-black text-white scheme-dark"
     >
       {/* The media sits between the top bar and the caption, leaving room
           above and below it to swipe. */}
@@ -1300,7 +1309,7 @@ export function FeedMenu({
         onClick={() => setOpen(true)}
         aria-label="Gmail options"
         className={`pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full text-xl leading-none ${
-          light ? "bg-surface-muted text-foreground" : "bg-white/15 text-white"
+          light ? "bg-surface-muted text-foreground" : "bg-surface-muted/80 text-foreground backdrop-blur-sm"
         }`}
       >
         ⋯
