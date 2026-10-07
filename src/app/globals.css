@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* Tints for browsers without color-mix(), e.g. iPadOS 15 (generated). */
+@import "./tint-fallbacks.css";
 
 /* Tailwind's dark: variant follows the device setting unless the person
    picked Light or Dark on their Profile (stored as data-theme on <html>). */

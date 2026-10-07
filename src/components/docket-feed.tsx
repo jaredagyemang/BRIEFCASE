@@ -224,11 +224,15 @@ function Feed({
     return () => observer.disconnect();
   }, [emails]);
 
-  // Moving to another player always lands on their Info card: every other
-  // row is put back to its first card (off screen, so it isn't seen).
+  // Moving to another player always lands on their Info card, at its top:
+  // every other row is put back to its first card (off screen, so it isn't
+  // seen).
   useEffect(() => {
     for (const [id, el] of rowRefs.current) {
-      if (id !== current?.id && el.scrollLeft !== 0) el.scrollLeft = 0;
+      if (id === current?.id) continue;
+      if (el.scrollLeft !== 0) el.scrollLeft = 0;
+      const card = el.firstElementChild;
+      if (card && card.scrollTop !== 0) card.scrollTop = 0;
     }
   }, [current?.id]);
 
@@ -374,6 +378,7 @@ function Feed({
               onShare: (note) => share(email, note),
               onUnshare: () => unshare(email),
               onReplied: (template) => replied(email, template),
+              onNextPlayer: i < emails.length - 1 ? () => goRow(i + 1) : undefined,
             }}
           />
         ))}
@@ -462,6 +467,8 @@ type InfoProps = {
   // Shown at the top of the card (e.g. why a card opened from search isn't
   // in the feed).
   statusNote?: string | null;
+  // In the feed: go to the next player (see the Info card's touch handling).
+  onNextPlayer?: () => void;
 };
 
 // --- One card on its own (opened from search) --------------------------------------
@@ -922,6 +929,7 @@ function InfoCard({
   onUnshare,
   onReplied,
   statusNote,
+  onNextPlayer,
 }: { email: DocketEmail; videoCount: number } & InfoProps) {
   const mail = useMail();
   const [replying, setReplying] = useState<ReplyTemplate | null>(null);
@@ -932,10 +940,45 @@ function InfoCard({
   const info = email.info;
   const pending = !info && !failed;
 
+  // A card a little taller than the screen (a narrow phone, or large text)
+  // scrolls by itself, so a flick up would only scroll its last few pixels
+  // and the coach would have to flick again for the next player. When all of
+  // the card's buttons are already in view, that flick goes to the next
+  // player. (If buttons are still hidden under the bottom bar, the flick
+  // shows them first, as before.) Even a fraction of a pixel left to scroll
+  // (large text) keeps the browser's flick on the card, so that counts too.
+  const flick = useRef<{ x: number; y: number; t: number; carryOn: boolean } | null>(null);
+  function onTouchStart(e: React.TouchEvent<HTMLElement>) {
+    const card = e.currentTarget;
+    const leftToScroll = card.scrollHeight - card.clientHeight - card.scrollTop;
+    const lastButtons = card.querySelector("[data-tour=card-skip-delete]");
+    const bar = document.querySelector("nav[aria-label=Modes] > div");
+    const visibleBottom = bar ? bar.getBoundingClientRect().top : card.getBoundingClientRect().bottom;
+    const allShown = Boolean(lastButtons && lastButtons.getBoundingClientRect().bottom <= visibleBottom + 1);
+    flick.current = {
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY,
+      t: e.timeStamp,
+      carryOn: Boolean(onNextPlayer) && leftToScroll > 0 && allShown && e.touches.length === 1,
+    };
+  }
+  function onTouchEnd(e: React.TouchEvent<HTMLElement>) {
+    const start = flick.current;
+    flick.current = null;
+    if (!start?.carryOn || !onNextPlayer) return;
+    const dx = e.changedTouches[0].clientX - start.x;
+    const dy = e.changedTouches[0].clientY - start.y;
+    // Up, mostly vertical, and a flick or a long drag (like the feed itself).
+    const quick = -dy / Math.max(1, e.timeStamp - start.t) > 0.3;
+    if (dy < -40 && -dy > Math.abs(dx) * 1.5 && (quick || -dy > e.currentTarget.clientHeight * 0.35)) onNextPlayer();
+  }
+
   return (
     <section
       aria-label={`Info card for ${info?.name?.value ?? "this player"}`}
       data-info-card
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
       className="flex h-full w-full shrink-0 snap-start snap-always flex-col overflow-y-auto pt-14 pr-[max(1rem,env(safe-area-inset-right))] pb-[calc(7rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))]"
     >
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col md:max-w-xl">
