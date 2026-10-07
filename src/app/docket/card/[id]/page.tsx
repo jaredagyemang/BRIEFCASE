@@ -2,11 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { SingleCard } from "@/components/docket-feed";
 import { PageScroller } from "@/components/page-scroller";
-import { HintsScope } from "@/components/hints";
 import { MailProviderScope } from "@/components/mail-provider";
 import { getConnectionSummary } from "@/lib/gmail/connection";
 import { loadDocketCard } from "@/lib/gmail/docket";
-import { seenHints } from "@/lib/hints";
 import { mailLabels } from "@/lib/mail/labels";
 import { getCurrentUser } from "@/lib/staff";
 
@@ -17,29 +15,22 @@ export default async function DocketCardPage({ params, searchParams }: PageProps
   const [{ id: rawId }, query] = await Promise.all([params, searchParams]);
   // Outlook's message ids contain "=", which arrives still encoded.
   const id = safeDecode(rawId);
-  const [result, user, connection, hints] = await Promise.all([
-    loadDocketCard(id),
-    getCurrentUser(),
-    getConnectionSummary(),
-    seenHints(),
-  ]);
+  const [result, user, connection] = await Promise.all([loadDocketCard(id), getCurrentUser(), getConnectionSummary()]);
   const mail = mailLabels(connection?.provider);
   if (result.status === "not_connected") redirect("/docket");
 
   if (result.status === "ok") {
     return (
       <MailProviderScope provider={connection?.provider ?? "google"}>
-        <HintsScope seen={hints}>
-          <SingleCard
-            initial={result.email}
-            card={result.card}
-            inTrash={result.inTrash}
-            canSend={result.canSend}
-            canDelete={result.canDelete}
-            coachName={user?.name ?? "Coach"}
-            fromList={query.from === "search" || query.from === "activity"}
-          />
-        </HintsScope>
+        <SingleCard
+          initial={result.email}
+          card={result.card}
+          inTrash={result.inTrash}
+          canSend={result.canSend}
+          canDelete={result.canDelete}
+          coachName={user?.name ?? "Coach"}
+          fromList={query.from === "search" || query.from === "activity"}
+        />
       </MailProviderScope>
     );
   }

@@ -164,7 +164,7 @@ export function DocketSearch({ connectedEmail, children }: { connectedEmail: str
           ‹ The Docket
         </button>
       )}
-      <div className={`relative ${query ? "mt-2" : "mt-6"}`}>
+      <div className={`relative ${query ? "mt-2" : "mt-6"}`} data-tour="docket-search">
         <svg
           aria-hidden
           viewBox="0 0 20 20"

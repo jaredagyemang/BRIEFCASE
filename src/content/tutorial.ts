@@ -2,7 +2,7 @@
 // terms (and again from Profile → Replay tutorial). One idea per screen; add,
 // remove or reword steps here.
 
-export type TutorialVisual = "welcome" | "events" | "docket" | "swipes" | "lists";
+export type TutorialVisual = "welcome" | "events" | "docket" | "swipes" | "replies" | "lists" | "help";
 export type TutorialStep = { title: string; body: string; visual: TutorialVisual };
 
 export const TUTORIAL_STEPS: TutorialStep[] = [
@@ -27,15 +27,18 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     body: "Swipe left and right to move between a player’s Info Card and their videos. Swipe up and down for the next player.",
   },
   {
+    visual: "replies",
+    title: "Reply, skip or delete",
+    body: "From an Info Card, reply from your own email with a ready-made message: Let’s Connect, Not interested, Wrong position or Wrong grad year. Skip takes a player out of your feed; Delete also moves the email to Trash (Deleted Items in Outlook).",
+  },
+  {
     visual: "lists",
     title: "Shortlist or Share to team",
     body: "☆ Shortlist adds a player to the staff Shortlist: the players you’re pursuing. ↗ Share to team posts them to Shared with team with an optional note. Your whole staff sees both lists.",
   },
+  {
+    visual: "help",
+    title: "Help on every page",
+    body: "If you ever need help on a page, tap the briefcase with the question mark and it will explain what everything does.",
+  },
 ];
-
-// One-time hints in The Docket (remembered per coach; see lib/hints.ts).
-export const HINTS = {
-  swipe: "Swipe left/right for the Info Card and videos, up/down for the next player.",
-  lists:
-    "☆ Shortlist: the staff’s list of players to pursue. ↗ Share to team: send them to Shared with team, with an optional note.",
-} as const;

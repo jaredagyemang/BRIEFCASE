@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useRef, useState, useTransition } from "react";
 import { completeTutorialAction } from "@/app/welcome/actions";
 import logoDark from "@/assets/brand/logo-dark.png";
+import { HelpIcon } from "@/components/page-help";
 import { TUTORIAL_STEPS, type TutorialVisual } from "@/content/tutorial";
 
 // The welcome tutorial, one idea per screen, gold on dark in both themes.
@@ -157,6 +158,30 @@ function Visual({ kind }: { kind: TutorialVisual }) {
             stroke="currentColor"
           />
         </svg>
+      </div>
+    );
+  }
+  if (kind === "replies") {
+    return (
+      <div className={`${tile} flex-col gap-2`} aria-hidden>
+        <div className="grid w-32 grid-cols-2 gap-1.5 text-[0.6rem] font-semibold">
+          {["Let’s Connect", "Not interested", "Wrong position", "Wrong grad year"].map((t) => (
+            <span key={t} className="rounded-lg bg-surface-muted px-1 py-1.5 leading-tight">
+              {t}
+            </span>
+          ))}
+          <span className="rounded-lg bg-surface-muted py-1.5">Skip</span>
+          <span className="rounded-lg bg-surface-muted py-1.5 text-red">Delete</span>
+        </div>
+      </div>
+    );
+  }
+  if (kind === "help") {
+    return (
+      <div className={tile} aria-hidden>
+        <span className="flex h-20 w-20 items-center justify-center rounded-full bg-case text-accent ring-1 ring-accent/40">
+          <HelpIcon className="h-11 w-11" />
+        </span>
       </div>
     );
   }

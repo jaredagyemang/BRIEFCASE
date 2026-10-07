@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import Link from "next/link";
+import { PageHelp, ToursScope } from "@/components/page-help";
 import { AddRosterButton } from "@/components/add-roster-button";
 import { Suspense } from "react";
 import { EventStatusButton } from "@/components/event-status-button";
@@ -10,19 +11,23 @@ import { StatusPill } from "@/components/status-pill";
 import { describePlayer, duplicateIds } from "@/lib/duplicates";
 import { eventPath, eventPlayerPath, formatEventDate } from "@/lib/events";
 import { getEvent } from "@/lib/events-server";
-import { LIFECYCLE_STATUSES, TRAFFIC_LIGHT_DOT, isLifecycleStatus, type Player, type TrafficLight } from "@/lib/players";
+import {
+  LIFECYCLE_STATUSES,
+  TRAFFIC_LIGHT_DOT,
+  isLifecycleStatus,
+  type Player,
+  type TrafficLight,
+} from "@/lib/players";
 import { PLAYERS_SORT_COOKIE, PLAYERS_SORTS, parseSort } from "@/lib/sort";
 import { createClient } from "@/lib/supabase/server";
 import { timeAgo } from "@/lib/time";
+import { seenTours } from "@/lib/tours";
 
 type Row = {
   jersey_number: string | null;
   traffic_light: TrafficLight | null;
   last_edited_at: string;
-  player: Pick<
-    Player,
-    "id" | "first_name" | "last_name" | "grad_year" | "position" | "club_team" | "lifecycle_status"
-  >;
+  player: Pick<Player, "id" | "first_name" | "last_name" | "grad_year" | "position" | "club_team" | "lifecycle_status">;
 };
 
 export default async function EventPage({ params, searchParams }: PageProps<"/events/[eventId]">) {
@@ -40,7 +45,9 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
   const [{ data, error }, { data: allPlayers }, { count: waitingNotes }] = await Promise.all([
     supabase
       .from("event_players")
-      .select("jersey_number, traffic_light, last_edited_at, player:players!inner(id, first_name, last_name, grad_year, position, club_team, lifecycle_status)")
+      .select(
+        "jersey_number, traffic_light, last_edited_at, player:players!inner(id, first_name, last_name, grad_year, position, club_team, lifecycle_status)",
+      )
       .eq("event_id", eventId)
       .returns<Row[]>(),
     // Possible duplicates across every player, so they're flagged here too.
@@ -79,7 +86,9 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
   const selectedChip = showDuplicates ? "duplicates" : status;
   const chips = [
     { value: null, label: "Active" },
-    ...(eventDuplicates.length > 0 ? [{ value: "duplicates", label: `⚠️ Duplicates (${eventDuplicates.length})` }] : []),
+    ...(eventDuplicates.length > 0
+      ? [{ value: "duplicates", label: `⚠️ Duplicates (${eventDuplicates.length})` }]
+      : []),
     ...LIFECYCLE_STATUSES,
   ];
   function chipHref(value: string | null) {
@@ -90,14 +99,19 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
     return s ? `${eventPath(eventId)}?${s}` : eventPath(eventId);
   }
 
+  const tours = await seenTours();
+
   return (
-    <div>
+    <ToursScope seen={tours}>
       <div className="flex items-center justify-between">
         <Link href="/events" className="text-accent-ink">
           ‹ Events
         </Link>
         <div className="flex gap-2">
-          <Link href={`${eventPath(eventId)}/edit`} className="rounded-full bg-surface-muted px-4 py-1.5 text-sm font-semibold">
+          <Link
+            href={`${eventPath(eventId)}/edit`}
+            className="rounded-full bg-surface-muted px-4 py-1.5 text-sm font-semibold"
+          >
             Edit
           </Link>
           <EventStatusButton eventId={eventId} status={event.status} />
@@ -105,7 +119,10 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
       </div>
 
       <div className="mt-4">
-        <h1 className="text-2xl font-bold tracking-tight">{event.name}</h1>
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="min-w-0 text-2xl font-bold tracking-tight break-words">{event.name}</h1>
+          <PageHelp tour="event" />
+        </div>
         <div className="mt-0.5 flex items-baseline justify-between gap-3">
           <p className="min-w-0 text-muted">
             {formatEventDate(event.event_date)} · {everyone.length} player{everyone.length === 1 ? "" : "s"}
@@ -121,12 +138,14 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
         <AddRosterButton scanPath={`${eventPath(eventId)}/scan`} />
         <Link
           href={`${eventPath(eventId)}/scan-notes`}
+          data-tour="event-notes"
           className="rounded-2xl bg-surface-muted py-3 text-center text-sm font-semibold"
         >
           ✍️ Scan notes
         </Link>
         <Link
           href={`${eventPath(eventId)}/players/new`}
+          data-tour="event-add"
           className="col-span-2 rounded-2xl bg-accent py-3 text-center text-sm font-semibold text-accent-foreground"
         >
           + Add player
@@ -157,7 +176,7 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
         </Suspense>
       </div>
 
-      <div className="-mx-4 mt-3 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
+      <div className="-mx-4 mt-3 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]" data-tour="event-filters">
         {chips.map((chip) => {
           const active = chip.value === selectedChip;
           return (
@@ -193,8 +212,8 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
         </div>
       ) : (
         <ul className="mt-4 divide-y divide-border overflow-hidden rounded-3xl bg-surface">
-          {rows.map(({ player: p, traffic_light, jersey_number, last_edited_at }) => (
-            <li key={p.id}>
+          {rows.map(({ player: p, traffic_light, jersey_number, last_edited_at }, i) => (
+            <li key={p.id} data-tour={i === 0 ? "event-first" : undefined}>
               <Link
                 href={eventPlayerPath(eventId, p.id)}
                 className="flex items-center gap-3 px-4 py-3.5 transition-colors active:bg-surface-muted sm:hover:bg-surface-muted"
@@ -231,6 +250,6 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
           ))}
         </ul>
       )}
-    </div>
+    </ToursScope>
   );
 }

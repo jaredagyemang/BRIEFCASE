@@ -14,6 +14,7 @@ export function AddRosterButton({ scanPath }: { scanPath: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
+        data-tour="event-roster"
         className="rounded-2xl bg-surface-muted py-3 text-center text-sm font-semibold"
       >
         📋 Add roster

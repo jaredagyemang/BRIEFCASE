@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { FeedMenu, StatePage } from "@/components/docket-feed";
 import { DocketSearch } from "@/components/docket-search";
+import { PageHelp } from "@/components/page-help";
 import { useMail } from "@/components/mail-provider";
 import { saveCheckSpam, useCheckSpam } from "@/components/docket-settings";
 import { StaffActivity } from "@/components/staff-activity";
@@ -134,7 +135,10 @@ export function DocketHome({
             <p className="text-sm font-semibold tracking-wide text-accent-ink uppercase">Daily Mode</p>
             <h1 className="text-3xl font-bold tracking-tight">The Docket</h1>
           </div>
-          <FeedMenu connectedEmail={connectedEmail} onRefresh={reload} loading={loading} light />
+          <div className="flex items-center gap-2">
+            <PageHelp tour="docket" />
+            <FeedMenu connectedEmail={connectedEmail} onRefresh={reload} loading={loading} light />
+          </div>
         </div>
 
         {showNotice && notice?.tone === "good" && (
@@ -173,6 +177,7 @@ export function DocketHome({
           <h2 className="mt-8 mb-2 px-1 text-sm font-semibold tracking-wide text-muted uppercase">Time range</h2>
           <div
             role="radiogroup"
+            data-tour="docket-range"
             aria-label="Time range"
             className="grid grid-cols-5 gap-1 rounded-2xl bg-surface-muted p-1"
           >
@@ -223,6 +228,7 @@ export function DocketHome({
           <div className="mt-6 space-y-3">
             {ready > 0 ? (
               <Link
+                data-tour="docket-start"
                 href={`/docket/review?range=${range.id}`}
                 className="block w-full rounded-2xl bg-accent py-4 text-center text-lg font-semibold text-accent-foreground"
               >
@@ -232,13 +238,16 @@ export function DocketHome({
               <button
                 type="button"
                 disabled
+                data-tour="docket-start"
                 className="w-full rounded-2xl bg-accent py-4 text-lg font-semibold text-accent-foreground opacity-40"
               >
                 Start Reviewing
               </button>
             )}
-            <ListLink href="/docket/shortlist" label="View Shortlist" count={counts?.shortlist} />
-            <ListLink href="/docket/shared" label="View Shared with team" count={counts?.shared} />
+            <div className="space-y-3" data-tour="docket-lists">
+              <ListLink href="/docket/shortlist" label="View Shortlist" count={counts?.shortlist} />
+              <ListLink href="/docket/shared" label="View Shared with team" count={counts?.shared} />
+            </div>
           </div>
 
           <StaffActivity connectedEmail={connectedEmail} hours={range.hours} phrase={range.phrase} />

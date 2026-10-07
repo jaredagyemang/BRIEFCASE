@@ -2,9 +2,11 @@ import { cookies, headers } from "next/headers";
 import { CopyButton } from "@/components/copy-button";
 import { DocketHome } from "@/components/docket-home";
 import { MailProviderScope } from "@/components/mail-provider";
+import { PageHelp, ToursScope } from "@/components/page-help";
 import { PageScroller } from "@/components/page-scroller";
 import { getConnectionSummary } from "@/lib/gmail/connection";
 import { createClient } from "@/lib/supabase/server";
+import { seenTours } from "@/lib/tours";
 import { OUTLOOK_ERROR_COOKIE, adminConsentUrl } from "@/lib/gmail/outlook";
 
 type Message = { tone: "good" | "bad"; text: string };
@@ -52,7 +54,7 @@ export default async function DocketPage({ searchParams }: PageProps<"/docket">)
       : outlookResult
         ? OUTLOOK_MESSAGES[outlookResult]
         : undefined;
-  const connection = await getConnectionSummary();
+  const [connection, tours] = await Promise.all([getConnectionSummary(), seenTours()]);
   const counts = connection ? await listCounts() : undefined;
   // Exactly why connecting Outlook didn't work (from Microsoft or the database).
   const reason =
@@ -60,41 +62,50 @@ export default async function DocketPage({ searchParams }: PageProps<"/docket">)
 
   if (connection) {
     return (
-      <MailProviderScope provider={connection.provider}>
-        <DocketHome
-          connectedEmail={connection.google_email}
-          notice={message ? { ...message, reason } : undefined}
-          extra={outlookResult === "admin-approval" ? <SchoolApproval reason={reason} /> : undefined}
-          counts={counts}
-        />
-      </MailProviderScope>
+      <ToursScope seen={tours}>
+        <MailProviderScope provider={connection.provider}>
+          <DocketHome
+            connectedEmail={connection.google_email}
+            notice={message ? { ...message, reason } : undefined}
+            extra={outlookResult === "admin-approval" ? <SchoolApproval reason={reason} /> : undefined}
+            counts={counts}
+          />
+        </MailProviderScope>
+      </ToursScope>
     );
   }
 
   return (
-    <PageScroller>
-      <p className="text-sm font-semibold tracking-wide text-accent-ink uppercase">Daily Mode</p>
-      <h1 className="text-3xl font-bold tracking-tight">The Docket</h1>
+    <ToursScope seen={tours}>
+      <PageScroller>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold tracking-wide text-accent-ink uppercase">Daily Mode</p>
+            <h1 className="text-3xl font-bold tracking-tight">The Docket</h1>
+          </div>
+          <PageHelp tour="docket-connect" />
+        </div>
 
-      {message && outlookResult !== "admin-approval" && (
-        <p
-          role="status"
-          className={`mt-4 rounded-2xl px-4 py-3 text-sm font-medium ${
-            message.tone === "good" ? "bg-green/15 text-foreground" : "bg-red/10 text-red"
-          }`}
-        >
-          {message.text}
-          {reason && (
-            <span className="mt-2 block font-mono text-xs break-words whitespace-pre-wrap" data-connect-reason>
-              Details: {reason}
-            </span>
-          )}
-        </p>
-      )}
-      {outlookResult === "admin-approval" && <SchoolApproval reason={reason} />}
+        {message && outlookResult !== "admin-approval" && (
+          <p
+            role="status"
+            className={`mt-4 rounded-2xl px-4 py-3 text-sm font-medium ${
+              message.tone === "good" ? "bg-green/15 text-foreground" : "bg-red/10 text-red"
+            }`}
+          >
+            {message.text}
+            {reason && (
+              <span className="mt-2 block font-mono text-xs break-words whitespace-pre-wrap" data-connect-reason>
+                Details: {reason}
+              </span>
+            )}
+          </p>
+        )}
+        {outlookResult === "admin-approval" && <SchoolApproval reason={reason} />}
 
-      <ConnectCard />
-    </PageScroller>
+        <ConnectCard />
+      </PageScroller>
+    </ToursScope>
   );
 }
 
@@ -107,18 +118,20 @@ function ConnectCard() {
         Connect your email and The Docket collects YouTube, Hudl and Veo links, plus Google Docs, from the last 30 days.
       </p>
       {/* Plain links, not <Link>: these leave the app for Google's or Microsoft's sign-in. */}
-      <a
-        href="/api/auth/gmail/start"
-        className="mt-6 w-full max-w-xs rounded-2xl bg-accent py-3.5 font-semibold text-accent-foreground"
-      >
-        Connect Gmail
-      </a>
-      <a
-        href="/api/auth/outlook/start"
-        className="mt-3 w-full max-w-xs rounded-2xl bg-accent py-3.5 font-semibold text-accent-foreground"
-      >
-        Connect Outlook
-      </a>
+      <div className="mt-6 w-full max-w-xs space-y-3" data-tour="docket-connect">
+        <a
+          href="/api/auth/gmail/start"
+          className="block w-full rounded-2xl bg-accent py-3.5 font-semibold text-accent-foreground"
+        >
+          Connect Gmail
+        </a>
+        <a
+          href="/api/auth/outlook/start"
+          className="block w-full rounded-2xl bg-accent py-3.5 font-semibold text-accent-foreground"
+        >
+          Connect Outlook
+        </a>
+      </div>
       <p className="mt-3 max-w-xs text-xs text-muted">
         One at a time. Briefcase reads emails with film links; it only sends a reply or deletes an email when you tap
         to. Disconnect anytime.
