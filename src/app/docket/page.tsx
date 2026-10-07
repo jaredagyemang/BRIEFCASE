@@ -116,7 +116,8 @@ function ConnectCard() {
       <DocketSlip />
       <p className="mt-6 text-lg font-semibold">Bring in film from your inbox</p>
       <p className="mt-1 max-w-xs text-muted">
-        Connect your email and The Docket collects YouTube, Hudl and Veo links, plus Google Docs, from the last 30 days.
+        Connect your email and The Docket collects YouTube, Hudl and Veo links, Google Docs and SportsRecruits profiles,
+        from the last 30 days.
       </p>
       {/* Plain links, not <Link>: these leave the app for Google's or Microsoft's sign-in. */}
       <div className="mt-6 w-full max-w-xs space-y-3" data-tour="docket-connect">

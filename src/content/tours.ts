@@ -52,7 +52,7 @@ export const TOURS: Record<TourKey, PageHelp> = {
     details: [
       {
         term: "Connecting your email",
-        text: "BRIEFCASE reads emails from the last 30 days that have YouTube, Hudl or Veo links, or Google Docs. It only sends a reply or deletes an email when you tap to. One mailbox at a time; disconnect anytime.",
+        text: "BRIEFCASE reads emails from the last 30 days that have YouTube, Hudl or Veo links, Google Docs, or SportsRecruits profiles. It only sends a reply or deletes an email when you tap to. One mailbox at a time; disconnect anytime.",
       },
     ],
   },
@@ -92,7 +92,7 @@ export const TOURS: Record<TourKey, PageHelp> = {
       },
       {
         term: "Videos",
-        text: "YouTube and Google Docs open right in the card. Hudl and Veo open in their own apps.",
+        text: "YouTube and Google Docs open right in the card. Hudl and Veo open in their own apps. SportsRecruits profiles open on SportsRecruits when you tap the button on the card.",
       },
     ],
   },

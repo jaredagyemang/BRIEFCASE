@@ -93,7 +93,10 @@ for (const file of files.filter((f) => f.endsWith(".css"))) {
   for (const block of css.matchAll(/@supports \(color:\s?color-mix\(in lab,\s?red,\s?red\)\)\s?\{/g)) {
     const start = block.index + block[0].length;
     let depth = 1, i = start;
-    while (depth && i < css.length) depth += css[i] === "{" ? 1 : css[i] === "}" ? -1 : 0, i++;
+    while (depth && i < css.length) {
+      depth += css[i] === "{" ? 1 : css[i] === "}" ? -1 : 0;
+      i++;
+    }
     for (const rule of css.slice(start, i - 1).matchAll(/([^{}]+)\{([^{}]*color-mix\(in oklab,\s?var\(--(?!color-|tw-)[a-z-]+\)[^{}]*)\}/g)) {
       for (const selector of rule[1].split(",")) {
         const cls = selector.trim().match(/^\.((?:\\.|[\w-])+)/)?.[1];

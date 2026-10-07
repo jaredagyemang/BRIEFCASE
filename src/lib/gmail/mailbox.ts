@@ -28,7 +28,7 @@ const outlook = (c: Connection) => c.row.provider === "microsoft";
 
 // Gmail search narrows the emails down; each one is then read to pull out the
 // actual links (search matches loosely, e.g. a mention of "youtube.com").
-const LINK_SITES = "{youtube.com youtu.be hudl.com veo.co docs.google.com}";
+const LINK_SITES = "{youtube.com youtu.be hudl.com veo.co docs.google.com sportsrecruits.com}";
 
 // Recent emails mentioning the film sites (not Spam/Junk or Trash/Deleted Items).
 export function listRecent(c: Connection, token: string, days: number, max: number) {

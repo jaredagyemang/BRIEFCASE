@@ -157,6 +157,10 @@ type Fetched = { status: number; headers: http.IncomingHttpHeaders; body: Buffer
 function get(url: URL): Promise<Fetched> {
   const host = url.hostname.replace(/^\[|\]$/g, "");
   if (net.isIP(host) && !allowed(host)) return Promise.reject(privateAddress());
+  // Never loaded by Briefcase's server, even after a redirect: SportsRecruits'
+  // terms don't allow automated access, and a visit can tell a family that a
+  // coach looked.
+  if (isSportsRecruits(host)) return Promise.reject(sportsRecruitsPage());
 
   return new Promise((resolve, reject) => {
     const client = url.protocol === "https:" ? https : http;
@@ -226,6 +230,12 @@ function get(url: URL): Promise<Fetched> {
     });
   });
 }
+
+const isSportsRecruits = (host: string) => /(^|\.)sportsrecruits\.com\.?$/i.test(host);
+const sportsRecruitsPage = () =>
+  new RosterLinkError(
+    "Briefcase doesn’t open SportsRecruits pages. Take a screenshot of the roster and use Scan roster → Choose from photos.",
+  );
 
 const privateAddress = () =>
   new RosterLinkError("That link points to a private network address, which Briefcase can’t open.");
