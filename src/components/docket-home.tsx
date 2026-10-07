@@ -40,7 +40,19 @@ function saveRange(id: RangeId) {
 // how many players there are to review in it (updating live as the AI reads
 // new emails), then start reviewing, or jump straight to the Shortlist; and
 // the team's activity in that range.
-export function DocketHome({ connectedEmail, notice }: { connectedEmail: string; notice?: string }) {
+// `notice`: the result of connecting Gmail or Outlook. A success fades after a
+// moment; a failure (e.g. switching from Gmail to Outlook didn't work) stays,
+// with the exact reason, until dismissed. `extra` replaces the failure box
+// when there's more to show (e.g. the note for a school's IT department).
+export function DocketHome({
+  connectedEmail,
+  notice,
+  extra,
+}: {
+  connectedEmail: string;
+  notice?: { tone: "good" | "bad"; text: string; reason?: string };
+  extra?: React.ReactNode;
+}) {
   const mail = useMail();
   const { result, loading, reload, failed } = useDocket(connectedEmail);
   const range = rangeFor(useSyncExternalStore(subscribeRange, readRange, () => DEFAULT_RANGE));
@@ -58,11 +70,13 @@ export function DocketHome({ connectedEmail, notice }: { connectedEmail: string;
     url.searchParams.delete("outlook");
     window.history.replaceState(null, "", url.pathname + url.search);
   }, [notice]);
+  // Successes fade; failures stay until dismissed.
+  const fades = notice?.tone === "good";
   useEffect(() => {
-    if (!showNotice) return;
+    if (!showNotice || !fades) return;
     const t = setTimeout(() => setShowNotice(false), 4000);
     return () => clearTimeout(t);
-  }, [showNotice]);
+  }, [showNotice, fades]);
 
   if (result && result.status !== "ok") {
     const expired = result.status === "expired" || result.status === "not_connected";
@@ -117,11 +131,29 @@ export function DocketHome({ connectedEmail, notice }: { connectedEmail: string;
           <FeedMenu connectedEmail={connectedEmail} onRefresh={reload} loading={loading} light />
         </div>
 
-        {showNotice && notice && (
+        {showNotice && notice?.tone === "good" && (
           <p role="status" className="mt-4 rounded-2xl bg-green/15 px-4 py-3 text-sm font-medium">
-            {notice}
+            {notice.text}
           </p>
         )}
+        {showNotice &&
+          notice?.tone === "bad" &&
+          (extra ?? (
+            <div role="status" className="mt-4 rounded-2xl bg-red/10 px-4 py-3 text-sm font-medium text-red" data-connect-error>
+              <p>{notice.text}</p>
+              {notice.reason && (
+                <p className="mt-2 font-mono text-xs break-words whitespace-pre-wrap" data-connect-reason>
+                  Details: {notice.reason}
+                </p>
+              )}
+              <p className="mt-2 text-xs font-normal text-muted">
+                You’re still connected to {mail.name} ({connectedEmail}).
+              </p>
+              <button type="button" onClick={() => setShowNotice(false)} className="mt-2 text-xs font-semibold underline">
+                Dismiss
+              </button>
+            </div>
+          ))}
 
         <DocketSearch connectedEmail={connectedEmail}>
           <h2 className="mt-8 mb-2 px-1 text-sm font-semibold tracking-wide text-muted uppercase">Time range</h2>

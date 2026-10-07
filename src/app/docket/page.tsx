@@ -28,6 +28,10 @@ const OUTLOOK_MESSAGES: Record<string, Message> = {
     tone: "bad",
     text: "Outlook wasn’t connected: Briefcase didn’t get permission to read your email. Connect again and accept.",
   },
+  "admin-approval": {
+    tone: "bad",
+    text: "Outlook wasn’t connected: your school needs an administrator to approve Briefcase first.",
+  },
   blocked: {
     tone: "bad",
     text: "Outlook wasn’t connected: your school’s security settings blocked the sign-in. Ask your IT department to allow Briefcase.",
@@ -57,7 +61,8 @@ export default async function DocketPage({ searchParams }: PageProps<"/docket">)
       <MailProviderScope provider={connection.provider}>
         <DocketHome
           connectedEmail={connection.google_email}
-          notice={message?.tone === "good" ? message.text : undefined}
+          notice={message ? { ...message, reason } : undefined}
+          extra={outlookResult === "admin-approval" ? <SchoolApproval reason={reason} /> : undefined}
         />
       </MailProviderScope>
     );
@@ -68,7 +73,7 @@ export default async function DocketPage({ searchParams }: PageProps<"/docket">)
       <p className="text-sm font-semibold tracking-wide text-accent-ink uppercase">Daily Mode</p>
       <h1 className="text-3xl font-bold tracking-tight">The Docket</h1>
 
-      {message && (
+      {message && outlookResult !== "admin-approval" && (
         <p
           role="status"
           className={`mt-4 rounded-2xl px-4 py-3 text-sm font-medium ${
