@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import Link from "next/link";
+import { AddRosterButton } from "@/components/add-roster-button";
 import { Suspense } from "react";
 import { EventStatusButton } from "@/components/event-status-button";
 import { ExportNotesLink } from "@/components/export-notes-link";
@@ -117,18 +118,7 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-2">
-        <Link
-          href={`${eventPath(eventId)}/scan`}
-          className="rounded-2xl bg-surface-muted py-3 text-center text-sm font-semibold"
-        >
-          📷 Scan roster
-        </Link>
-        <Link
-          href={`${eventPath(eventId)}/scan?source=link`}
-          className="rounded-2xl bg-surface-muted py-3 text-center text-sm font-semibold"
-        >
-          🔗 Paste link
-        </Link>
+        <AddRosterButton scanPath={`${eventPath(eventId)}/scan`} />
         <Link
           href={`${eventPath(eventId)}/scan-notes`}
           className="rounded-2xl bg-surface-muted py-3 text-center text-sm font-semibold"
@@ -137,7 +127,7 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
         </Link>
         <Link
           href={`${eventPath(eventId)}/players/new`}
-          className="rounded-2xl bg-accent py-3 text-center text-sm font-semibold text-accent-foreground"
+          className="col-span-2 rounded-2xl bg-accent py-3 text-center text-sm font-semibold text-accent-foreground"
         >
           + Add player
         </Link>

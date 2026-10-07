@@ -133,11 +133,11 @@ export function cleanSearch(q: string) {
     .slice(0, 60);
 }
 
-// --- Team activity ------------------------------------------------------------------
+// --- Staff activity ------------------------------------------------------------------
 
 export type ActivityAction = "shortlisted" | "unshortlisted" | "shared" | "unshared" | "replied";
 
-// One line of team activity: only the fact that it happened, never anything
+// One line of staff activity: only the fact that it happened, never anything
 // from the email.
 export type ActivityEntry = {
   id: string;
@@ -157,3 +157,41 @@ export type ActivityPage =
   | { status: "error"; message: string };
 
 export const ACTIVITY_PAGE_SIZE = 20;
+
+// --- Shortlist and Share to team ---------------------------------------------------
+
+// Adding to the Shortlist or Shared with team: done, or already there (the
+// same email, or the same player from a different email), with who added it.
+export type ListResult =
+  | { status: "done" }
+  | {
+      status: "already";
+      // "same": this email is already on the list. "name": a player with the
+      // same name (and grad year, when both say) is, from another email.
+      match: "same" | "name";
+      player: string | null;
+      // "you", or the coach's name.
+      by: string;
+      at: string;
+      note: string | null;
+    };
+
+// A name for matching: no accents, capitals, punctuation or extra spaces.
+export const matchName = (name: string) =>
+  name
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+
+// Same player on two Info cards: the same name, and the same grad year when
+// both cards have one.
+export function samePlayer(a: DocketInfo | null | undefined, b: DocketInfo | null | undefined) {
+  const nameA = a?.name?.value ? matchName(a.name.value) : "";
+  const nameB = b?.name?.value ? matchName(b.name.value) : "";
+  if (!nameA || nameA !== nameB) return false;
+  const yearA = a?.grad_year?.value?.match(/\d{4}/)?.[0];
+  const yearB = b?.grad_year?.value?.match(/\d{4}/)?.[0];
+  return !yearA || !yearB || yearA === yearB;
+}

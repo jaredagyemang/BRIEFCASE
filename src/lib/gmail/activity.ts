@@ -11,7 +11,7 @@ import {
 import { getCurrentUser } from "@/lib/staff";
 import { createClient } from "@/lib/supabase/server";
 
-// Team activity on The Docket: who shortlisted, shared, removed or turned
+// Staff activity on The Docket: who shortlisted, shared, removed or turned
 // down which player, recorded by the database (docket_activity).
 
 type ActivityRow = {
@@ -52,7 +52,7 @@ function toEntry(row: ActivityRow, me: string): ActivityEntry {
 
 // The latest activity within the last `hours` (one of The Docket's ranges),
 // newest first, a page at a time (`before`: the time of the last one shown).
-export async function loadTeamActivity(hours: number, before?: string | null): Promise<ActivityPage> {
+export async function loadStaffActivity(hours: number, before?: string | null): Promise<ActivityPage> {
   if (!RANGES.some((r) => r.hours === hours)) return { status: "error", message: "Unknown time range." };
   const user = await getCurrentUser();
   if (!user) return { status: "error", message: "You've been signed out. Sign in again." };
@@ -67,8 +67,8 @@ export async function loadTeamActivity(hours: number, before?: string | null): P
   if (before && !Number.isNaN(Date.parse(before))) query = query.lt("created_at", before);
   const { data, error } = await query.returns<ActivityRow[]>();
   if (error) {
-    console.error("Loading team activity failed", error.message);
-    return { status: "error", message: "Couldn’t load team activity. Try again." };
+    console.error("Loading staff activity failed", error.message);
+    return { status: "error", message: "Couldn’t load staff activity. Try again." };
   }
   const rows = data ?? [];
   return {

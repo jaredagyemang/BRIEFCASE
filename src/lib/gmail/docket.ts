@@ -13,9 +13,11 @@ import {
   REPLY_TEMPLATES,
   cleanSearch,
   isCurrentInfo,
+  samePlayer,
   type CardResult,
   type CardStatus,
   type GmailSearchResult,
+  type ListResult,
   type SearchResult,
   type DocketEmail,
   type DocketInfo,
@@ -409,21 +411,46 @@ export const SNAPSHOT_TABLE: Record<SnapshotList, "shortlist" | "team_shares"> =
 };
 const LIST_NAME: Record<SnapshotList, string> = { shortlist: "the Shortlist", shared: "Shared with team" };
 
-export async function setShortlisted(messageId: string, shortlisted: boolean) {
-  return setOnList("shortlist", messageId, shortlisted);
+// force: add even though a player with the same name is already on the list
+// (from another email). The same email is never added twice.
+export async function setShortlisted(messageId: string, shortlisted: boolean, force = false) {
+  return setOnList("shortlist", messageId, shortlisted, null, force);
 }
 
 // `note`: an optional message for the team, shown on the shared list.
-export async function setShared(messageId: string, shared: boolean, note?: string | null) {
-  return setOnList("shared", messageId, shared, note);
+export async function setShared(messageId: string, shared: boolean, note?: string | null, force = false) {
+  return setOnList("shared", messageId, shared, note, force);
 }
 
-async function setOnList(list: SnapshotList, messageId: string, on: boolean, note?: string | null) {
+type ListRow = {
+  source_staff_id: string | null;
+  gmail_message_id: string;
+  added_by: string | null;
+  created_at: string;
+  info: DocketInfo;
+  note?: string | null;
+  adder: { full_name: string } | null;
+};
+
+const LIST_FKEY: Record<SnapshotList, string> = {
+  shortlist: "shortlist_added_by_fkey",
+  shared: "team_shares_added_by_fkey",
+};
+
+async function setOnList(
+  list: SnapshotList,
+  messageId: string,
+  on: boolean,
+  note?: string | null,
+  force = false,
+): Promise<ListResult> {
   const connection = await loadConnection();
   if (!connection) throw new Error("Gmail isn't connected.");
   const { supabase, row } = connection;
   const table = SNAPSHOT_TABLE[list];
 
+  // Only ever removed directly: by this coach on their own card (here), or by
+  // anyone from the list itself. Replies, Skip and Delete never touch lists.
   if (!on) {
     const { error } = await supabase
       .from(table)
@@ -431,22 +458,49 @@ async function setOnList(list: SnapshotList, messageId: string, on: boolean, not
       .eq("source_staff_id", row.staff_id)
       .eq("gmail_message_id", messageId);
     if (error) throw new Error(`Couldn't update ${LIST_NAME[list]}: ${error.message}`);
-    return;
+    return { status: "done" };
+  }
+
+  const { data: item } = await supabase
+    .from("docket_items")
+    .select("extraction")
+    .eq("staff_id", row.staff_id)
+    .eq("gmail_message_id", messageId)
+    .maybeSingle<Pick<ItemRow, "extraction">>();
+  const info = item?.extraction ?? null;
+
+  // Already there? This email, or (unless the coach said to add anyway) the
+  // same player from another email.
+  const { data: existing, error: listError } = await supabase
+    .from(table)
+    .select(
+      `source_staff_id, gmail_message_id, added_by, created_at, info${list === "shared" ? ", note" : ""}, adder:staff!${LIST_FKEY[list]}(full_name)`,
+    )
+    .order("created_at", { ascending: true })
+    .returns<ListRow[]>();
+  if (listError) throw new Error(`Couldn't check ${LIST_NAME[list]}: ${listError.message}`);
+  const same = (existing ?? []).find((e) => e.source_staff_id === row.staff_id && e.gmail_message_id === messageId);
+  const namesake = force ? undefined : (existing ?? []).find((e) => samePlayer(e.info, info));
+  const match = same ?? namesake;
+  if (match) {
+    return {
+      status: "already",
+      match: same ? "same" : "name",
+      player: match.info?.name?.value ?? info?.name?.value ?? null,
+      by: match.added_by === row.staff_id ? "you" : (match.adder?.full_name ?? "a former staff member"),
+      at: match.created_at,
+      note: match.note ?? null,
+    };
   }
 
   // Other coaches can't see this inbox, so copy what they need to see.
   const message = await withGmail(connection, (token) => getMessage(token, messageId));
-  const { data: item } = await supabase
-    .from("docket_items")
-    .select("extraction")
-    .eq("gmail_message_id", messageId)
-    .maybeSingle<Pick<ItemRow, "extraction">>();
   const { from, fromEmail, subject, date } = describe(message);
   const { error } = await supabase.from(table).upsert(
     {
       source_staff_id: row.staff_id,
       gmail_message_id: messageId,
-      info: item?.extraction ?? emptyInfo(),
+      info: info ?? emptyInfo(),
       sender_name: from,
       sender_email: fromEmail,
       subject,
@@ -458,6 +512,7 @@ async function setOnList(list: SnapshotList, messageId: string, on: boolean, not
     { onConflict: "source_staff_id,gmail_message_id", ignoreDuplicates: true },
   );
   if (error) throw new Error(`Couldn't update ${LIST_NAME[list]}: ${error.message}`);
+  return { status: "done" };
 }
 
 export function emptyInfo(): DocketInfo {

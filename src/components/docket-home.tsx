@@ -5,7 +5,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { FeedMenu, StatePage } from "@/components/docket-feed";
 import { DocketSearch } from "@/components/docket-search";
 import { saveCheckSpam, useCheckSpam } from "@/components/docket-settings";
-import { TeamActivity } from "@/components/team-activity";
+import { StaffActivity } from "@/components/staff-activity";
 import { useDocket } from "@/components/use-docket";
 import { DEFAULT_RANGE, RANGES, inRange, rangeFor, type RangeId } from "@/lib/gmail/docket-types";
 
@@ -196,7 +196,7 @@ export function DocketHome({ connectedEmail, notice }: { connectedEmail: string;
             </Link>
           </div>
 
-          <TeamActivity connectedEmail={connectedEmail} hours={range.hours} phrase={range.phrase} />
+          <StaffActivity connectedEmail={connectedEmail} hours={range.hours} phrase={range.phrase} />
         </DocketSearch>
       </div>
     </div>

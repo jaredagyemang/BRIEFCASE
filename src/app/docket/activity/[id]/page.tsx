@@ -5,7 +5,7 @@ import { PageScroller } from "@/components/page-scroller";
 import { SnapshotCard, loadSnapshot } from "@/components/snapshot-list";
 import { loadActivityEntry } from "@/lib/gmail/activity";
 
-// One line of team activity, opened. From this coach's own inbox: their Info
+// One line of staff activity, opened. From this coach's own inbox: their Info
 // card. From another coach's: the copy shared with the team (Shared with
 // team or the Shortlist), or, if it was never shared, just what happened.
 export default async function ActivityEntryPage({ params }: PageProps<"/docket/activity/[id]">) {

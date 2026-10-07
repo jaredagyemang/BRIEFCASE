@@ -2,7 +2,7 @@ import type { ActivityEntry } from "@/lib/gmail/docket-types";
 import { TEMPLATE_LABEL } from "@/lib/gmail/templates";
 import { timeAgo } from "@/lib/time";
 
-// One line of team activity: "Coach Rivera shared Maya Johnson with the team
+// One line of staff activity: "Coach Rivera shared Maya Johnson with the team
 // · “not sure about position fit” · 2 hours ago".
 export function ActivityLine({ entry }: { entry: ActivityEntry }) {
   const player = <span className="font-semibold">{entry.player ?? "a player"}</span>;
