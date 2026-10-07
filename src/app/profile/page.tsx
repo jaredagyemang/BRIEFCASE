@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { signOut } from "@/app/login/actions";
@@ -60,7 +61,14 @@ export default async function ProfilePage() {
         </button>
       </form>
 
-      <p className="mt-6 text-center text-xs text-muted">Version {process.env.APP_VERSION}</p>
+      <Link
+        href="/welcome?replay=1&next=%2Fprofile"
+        className="mt-6 block text-center text-sm font-semibold text-accent-ink"
+        data-replay-tutorial
+      >
+        Replay tutorial
+      </Link>
+      <p className="mt-4 text-center text-xs text-muted">Version {process.env.APP_VERSION}</p>
     </div>
   );
 }
