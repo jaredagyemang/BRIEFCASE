@@ -49,7 +49,7 @@ export default function LoginPage() {
           {pending ? "Signing in…" : "Sign in"}
         </button>
       </form>
-      <Link href="/forgot-password" className="mt-5 self-center text-sm font-semibold text-accent-ink">
+      <Link href="/forgot-password" className="mt-2 self-center px-2 py-3 text-sm font-semibold text-accent-ink">
         Forgot password?
       </Link>
     </div>

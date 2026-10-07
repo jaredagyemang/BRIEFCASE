@@ -86,3 +86,42 @@ body {
   color: var(--foreground);
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Buttons show a pointer cursor (Tailwind 4 leaves them on the default). */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+label:has(> input[type="checkbox"], > input[type="radio"]) {
+  cursor: pointer;
+}
+
+/* Hover feedback for a mouse or trackpad (not touch screens, where it would
+   stick after a tap): a slight shift in shade, darker in light mode and
+   lighter in dark mode. */
+@media (hover: hover) and (pointer: fine) {
+  :root,
+  .scheme-dark {
+    --hover-shade: light-dark(0.94, 1.22);
+  }
+  :is(a[href], button:not(:disabled), [role="tab"], select, label:has(> input)):hover {
+    filter: brightness(var(--hover-shade));
+  }
+}
+
+/* A bigger touch area for a small control without changing how it looks or
+   where it sits: an invisible margin around it that still counts as the
+   control (about 44px tall for most small buttons and links). Use with
+   relative (or absolute/fixed) so the margin is placed around the control. */
+@utility hit {
+  &::before {
+    content: "";
+    position: absolute;
+    inset: -0.375rem -0.25rem;
+  }
+}
+@utility hit-lg {
+  &::before {
+    content: "";
+    position: absolute;
+    inset: -0.75rem -0.375rem;
+  }
+}

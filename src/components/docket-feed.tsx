@@ -378,34 +378,45 @@ function Feed({
         ))}
       </div>
 
-      {/* Top bar over the feed */}
+      {/* Mouse controls (on a computer, or an iPad with a trackpad) */}
+      <CardArrows
+        dark={activeCol > 0}
+        onLeft={activeCol > 0 ? () => goCol(activeCol - 1) : undefined}
+        onRight={activeCol < cardCount - 1 ? () => goCol(activeCol + 1) : undefined}
+        onUp={row > 0 ? () => goRow(row - 1) : undefined}
+        onDown={row < emails.length - 1 ? () => goRow(row + 1) : undefined}
+      />
+
+      {/* Top bar over the feed, lined up with the card below it */}
       <div
-        className={`pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-background/90 to-transparent px-4 pt-3 pb-8 ${
+        className={`pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-background/90 to-transparent pt-3 pr-[max(1rem,env(safe-area-inset-right))] pb-8 pl-[max(1rem,env(safe-area-inset-left))] ${
           activeCol > 0 ? "scheme-dark" : ""
         }`}
       >
-        <p className="text-sm font-semibold">
-          <Link href="/docket" className="pointer-events-auto text-accent-ink" data-tour="feed-back">
-            ‹ The Docket
-          </Link>
-          <span className="ml-2 text-muted" aria-live="polite">
-            {row + 1} / {emails.length}
-          </span>
-        </p>
-        {/* Which card of this player: the Info card, then each video. */}
-        {cardCount > 1 && (
-          <div className="flex items-center gap-1.5" aria-label={`Card ${activeCol + 1} of ${cardCount}`} role="img">
-            {Array.from({ length: cardCount }, (_, i) => (
-              <span
-                key={i}
-                className={`h-1.5 rounded-full transition-all ${i === activeCol ? "w-4 bg-foreground" : "w-1.5 bg-foreground/40"}`}
-              />
-            ))}
+        <div className="mx-auto flex max-w-3xl items-center justify-between">
+          <p className="text-sm font-semibold">
+            <Link href="/docket" className="pointer-events-auto -my-3 inline-block py-3 text-accent-ink" data-tour="feed-back">
+              ‹ The Docket
+            </Link>
+            <span className="ml-2 text-muted" aria-live="polite">
+              {row + 1} / {emails.length}
+            </span>
+          </p>
+          {/* Which card of this player: the Info card, then each video. */}
+          {cardCount > 1 && (
+            <div className="flex items-center gap-1.5" aria-label={`Card ${activeCol + 1} of ${cardCount}`} role="img">
+              {Array.from({ length: cardCount }, (_, i) => (
+                <span
+                  key={i}
+                  className={`h-1.5 rounded-full transition-all ${i === activeCol ? "w-4 bg-foreground" : "w-1.5 bg-foreground/40"}`}
+                />
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <PageHelp tour="docket-review" />
+            <FeedMenu connectedEmail={connectedEmail} onRefresh={reload} loading={loading} />
           </div>
-        )}
-        <div className="flex items-center gap-2">
-          <PageHelp tour="docket-review" />
-          <FeedMenu connectedEmail={connectedEmail} onRefresh={reload} loading={loading} />
         </div>
       </div>
 
@@ -570,6 +581,29 @@ export function SingleCard({
 
   const note = statusNote(card, trashed, mail.trash);
   const cardCount = 1 + media.length;
+  const rowEl = useRef<HTMLDivElement | null>(null);
+
+  function goCol(index: number) {
+    const el = rowEl.current;
+    if (!el) return;
+    const target = Math.max(0, Math.min(cardCount - 1, index));
+    const instant = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollTo({ left: target * el.clientWidth, behavior: instant ? "instant" : "smooth" });
+  }
+
+  // Arrow keys (and h/l) move between the Info card and the videos.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.defaultPrevented || e.altKey || e.metaKey || e.ctrlKey || document.querySelector("[role=dialog]")) return;
+      if (e.target instanceof HTMLElement && e.target.closest("input, textarea, select")) return;
+      const step = { ArrowRight: 1, l: 1, ArrowLeft: -1, h: -1 }[e.key];
+      if (!step) return;
+      e.preventDefault();
+      goCol(col + step);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   return (
     <FeedShell>
@@ -581,7 +615,9 @@ export function SingleCard({
           total={1}
           active
           activeCol={col}
-          rowRef={() => {}}
+          rowRef={(el) => {
+            rowEl.current = el;
+          }}
           onCol={setCol}
           info={{
             reading,
@@ -605,25 +641,33 @@ export function SingleCard({
         />
       </div>
 
+      <CardArrows
+        dark={col > 0}
+        onLeft={col > 0 ? () => goCol(col - 1) : undefined}
+        onRight={col < cardCount - 1 ? () => goCol(col + 1) : undefined}
+      />
+
       <div
-        className={`pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-background/90 to-transparent px-4 pt-3 pb-8 ${
+        className={`pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-background/90 to-transparent pt-3 pr-[max(1rem,env(safe-area-inset-right))] pb-8 pl-[max(1rem,env(safe-area-inset-left))] ${
           col > 0 ? "scheme-dark" : ""
         }`}
       >
-        <button type="button" onClick={back} className="pointer-events-auto w-14 text-left text-sm font-semibold text-accent-ink">
-          ‹ Back
-        </button>
-        {cardCount > 1 && (
-          <div className="flex items-center gap-1.5" aria-label={`Card ${col + 1} of ${cardCount}`} role="img">
-            {Array.from({ length: cardCount }, (_, i) => (
-              <span
-                key={i}
-                className={`h-1.5 rounded-full transition-all ${i === col ? "w-4 bg-foreground" : "w-1.5 bg-foreground/40"}`}
-              />
-            ))}
-          </div>
-        )}
-        <span className="w-14" />
+        <div className="mx-auto flex max-w-3xl items-center justify-between">
+          <button type="button" onClick={back} className="pointer-events-auto -my-3 w-14 py-3 text-left text-sm font-semibold text-accent-ink">
+            ‹ Back
+          </button>
+          {cardCount > 1 && (
+            <div className="flex items-center gap-1.5" aria-label={`Card ${col + 1} of ${cardCount}`} role="img">
+              {Array.from({ length: cardCount }, (_, i) => (
+                <span
+                  key={i}
+                  className={`h-1.5 rounded-full transition-all ${i === col ? "w-4 bg-foreground" : "w-1.5 bg-foreground/40"}`}
+                />
+              ))}
+            </div>
+          )}
+          <span className="w-14" />
+        </div>
       </div>
 
       {toast && (
@@ -831,6 +875,7 @@ function PlayerRow({
           const el = e.currentTarget;
           if (el.clientWidth) onCol(Math.round(el.scrollLeft / el.clientWidth));
         }}
+        data-player-row
         className="flex h-full snap-x snap-mandatory overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         <InfoCard email={email} videoCount={media.length} {...info} />
@@ -890,9 +935,9 @@ function InfoCard({
     <section
       aria-label={`Info card for ${info?.name?.value ?? "this player"}`}
       data-info-card
-      className="flex h-full w-full shrink-0 snap-start snap-always flex-col overflow-y-auto px-4 pt-14 pb-[calc(7rem+env(safe-area-inset-bottom))]"
+      className="flex h-full w-full shrink-0 snap-start snap-always flex-col overflow-y-auto pt-14 pr-[max(1rem,env(safe-area-inset-right))] pb-[calc(7rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))]"
     >
-      <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
+      <div className="mx-auto flex w-full max-w-md flex-1 flex-col md:max-w-xl">
         <p className="flex items-center gap-2 text-xs text-muted">
           <span className="rounded-full bg-accent px-2 py-0.5 font-semibold text-accent-foreground">Info</span>
           {email.inSpam && (
@@ -1022,9 +1067,17 @@ function InfoCard({
             </button>
           </div>
           {videoCount > 0 && (
-            <p className="mt-3 text-center text-sm text-muted">
+            // Also a button, so a mouse can get to the videos.
+            <button
+              type="button"
+              onClick={(e) => {
+                const row = e.currentTarget.closest<HTMLElement>("[data-player-row]");
+                row?.scrollTo({ left: row.clientWidth, behavior: "smooth" });
+              }}
+              className="mt-1 self-center px-3 py-2.5 text-sm text-muted"
+            >
               Swipe for {videoCount === 1 ? "their video" : `${videoCount} videos`} →
-            </p>
+            </button>
           )}
         </div>
       </div>
@@ -1238,14 +1291,14 @@ function VideoCard({ email, link, active }: { email: DocketEmail; link: FoundLin
     >
       {/* The media sits between the top bar and the caption, leaving room
           above and below it to swipe. */}
-      <div className="flex min-h-0 flex-1 items-center justify-center px-3 pt-14 pb-[calc(15rem+env(safe-area-inset-bottom))]">
+      <div className="flex min-h-0 flex-1 items-center justify-center pt-14 pr-[max(0.75rem,env(safe-area-inset-right))] pb-[calc(15rem+env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))]">
         {link.platform === "youtube" && <YouTubeMedia url={link.url} active={active} />}
         {link.platform === "gdoc" && <DocMedia url={link.url} active={active} />}
         {(link.platform === "hudl" || link.platform === "veo") && <OpenElsewhere item={link} />}
       </div>
 
       {/* Caption: who sent it */}
-      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/80 to-transparent px-4 pt-12 pb-[calc(7rem+env(safe-area-inset-bottom))]">
+      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/80 to-transparent pt-12 pr-[max(1rem,env(safe-area-inset-right))] pb-[calc(7rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))]">
         <div className="mx-auto max-w-3xl">
           <p className="flex items-center gap-2 text-xs text-white/70">
             <span className="rounded-full bg-white/15 px-2 py-0.5 font-semibold text-white">
@@ -1260,7 +1313,7 @@ function VideoCard({ email, link, active }: { email: DocketEmail; link: FoundLin
               href={link.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-2 inline-block text-sm font-semibold text-accent"
+              className="-my-1 mt-1 inline-block py-2.5 text-sm font-semibold text-accent"
             >
               {OPEN_LABEL[link.platform]} ↗
             </a>
@@ -1275,7 +1328,11 @@ function VideoCard({ email, link, active }: { email: DocketEmail; link: FoundLin
 // the feed stays quick and only one video plays at a time.
 function YouTubeMedia({ url, active }: { url: string; active: boolean }) {
   const video = youtubeVideo(url);
-  const box = video?.vertical ? "aspect-[9/16] h-full max-w-full" : "aspect-video w-full max-w-3xl";
+  // Wide film grows with the screen, but never taller than the space between
+  // the top bar and the caption, with room above it for the unmute hint.
+  const box = video?.vertical
+    ? "aspect-[9/16] h-full max-w-full"
+    : "aspect-video w-full max-w-[min(56rem,calc((100dvh-26rem-env(safe-area-inset-bottom))*16/9))]";
   if (!video) return <OpenElsewhere item={{ platform: "youtube", url }} />;
   return (
     <div className={`relative ${box}`}>
@@ -1350,7 +1407,7 @@ function UnmuteHint({ inside }: { inside: boolean }) {
 function DocMedia({ url, active }: { url: string; active: boolean }) {
   const preview = googleDocPreview(url);
   return (
-    <div className="relative h-full w-full max-w-md overflow-hidden rounded-2xl bg-white">
+    <div className="relative h-full w-full max-w-md overflow-hidden rounded-2xl bg-white md:max-w-2xl">
       {active && preview ? (
         <iframe src={preview} title="Google Doc preview" tabIndex={-1} className="pointer-events-none absolute inset-0 h-full w-full" />
       ) : (
@@ -1383,6 +1440,55 @@ function OpenElsewhere({ item }: { item: Pick<FoundLink, "platform" | "url"> }) 
 }
 
 // ⋯ menu: which account, refresh, disconnect.
+// Arrows for a mouse or trackpad, which can't swipe: ‹ › between a player's
+// Info card and videos, ˄ ˅ between players. Only shown where there's a fine
+// pointer that can hover (not on touch screens), on screens wide enough to
+// keep them beside the card.
+function CardArrows({
+  dark,
+  onLeft,
+  onRight,
+  onUp,
+  onDown,
+}: {
+  dark: boolean;
+  onLeft?: () => void;
+  onRight?: () => void;
+  onUp?: () => void;
+  onDown?: () => void;
+}) {
+  const arrow = (label: string, onClick: (() => void) | undefined, path: string, place: string) =>
+    onClick && (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={label}
+        className={`pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full bg-surface/85 text-foreground shadow-md ring-1 ring-border backdrop-blur-sm ${place}`}
+      >
+        <svg aria-hidden viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <path d={path} />
+        </svg>
+      </button>
+    );
+  return (
+    <div
+      className={`pointer-events-none absolute inset-0 hidden md:[@media(hover:hover)_and_(pointer:fine)]:block ${dark ? "scheme-dark" : ""}`}
+      data-card-arrows
+    >
+      <div className="relative mx-auto h-full max-w-5xl">
+        {arrow("Previous card", onLeft, "M12.5 4.5 7 10l5.5 5.5", "absolute top-1/2 left-4 -translate-y-1/2")}
+        {arrow("Next card", onRight, "M7.5 4.5 13 10l-5.5 5.5", "absolute top-1/2 right-4 -translate-y-1/2")}
+        {(onUp || onDown) && (
+          <div className="absolute right-4 bottom-[calc(7.5rem+env(safe-area-inset-bottom))] flex flex-col gap-2">
+            {arrow("Previous player", onUp, "M4.5 12.5 10 7l5.5 5.5", "")}
+            {arrow("Next player", onDown, "M4.5 7.5 10 13l5.5-5.5", "")}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function FeedMenu({
   connectedEmail,
   onRefresh,
@@ -1427,7 +1533,7 @@ export function FeedMenu({
         onClick={() => setOpen(true)}
         aria-label={`${mail.name} options`}
         data-tour="docket-menu"
-        className={`pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full text-xl leading-none ${
+        className={`hit pointer-events-auto relative flex h-9 w-9 items-center justify-center rounded-full text-xl leading-none ${
           light ? "bg-surface-muted text-foreground" : "bg-surface-muted/80 text-foreground backdrop-blur-sm"
         }`}
       >

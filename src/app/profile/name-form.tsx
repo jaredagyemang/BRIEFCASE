@@ -8,8 +8,8 @@ export function NameForm({ name }: { name: string }) {
   const [state, formAction, pending] = useActionState(updateMyName, undefined);
 
   return (
-    <form action={formAction} className="px-4 py-3">
-      <label className="flex items-center gap-3">
+    <form action={formAction} className="px-4 py-1.5">
+      <label className="flex items-center gap-3 py-1.5">
         <span className="shrink-0 text-muted">Name</span>
         <input
           name="full_name"
@@ -21,7 +21,7 @@ export function NameForm({ name }: { name: string }) {
         <button
           type="submit"
           disabled={pending}
-          className="shrink-0 rounded-full bg-accent px-3.5 py-1.5 text-sm font-semibold text-accent-foreground disabled:opacity-60"
+          className="hit relative shrink-0 rounded-full bg-accent px-3.5 py-1.5 text-sm font-semibold text-accent-foreground disabled:opacity-60"
         >
           {pending ? "Saving…" : "Save"}
         </button>

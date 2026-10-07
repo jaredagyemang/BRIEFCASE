@@ -14,7 +14,7 @@ export function RemoveFromListButton({ list, id, name }: { list: SnapshotList; i
       disabled={pending}
       aria-label={`Remove ${name} from ${LIST_NAME[list]}`}
       onClick={() => startTransition(() => removeFromListAction(list, id))}
-      className="shrink-0 rounded-full bg-surface-muted px-3 py-1 text-sm font-semibold text-muted disabled:opacity-60"
+      className="hit-lg relative shrink-0 rounded-full bg-surface-muted px-3 py-1 text-sm font-semibold text-muted disabled:opacity-60"
     >
       {pending ? "Removing…" : "Remove"}
     </button>

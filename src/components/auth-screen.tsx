@@ -20,7 +20,7 @@ export function AuthScreen({
         {subtitle && <p className="mt-1 text-muted">{subtitle}</p>}
       </div>
       <div className="mt-6">{children}</div>
-      <Link href="/login" className="mt-6 self-center text-sm font-semibold text-accent-ink">
+      <Link href="/login" className="mt-3 self-center px-2 py-3 text-sm font-semibold text-accent-ink">
         ‹ Back to sign in
       </Link>
     </div>

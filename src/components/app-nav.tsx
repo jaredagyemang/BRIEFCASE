@@ -139,11 +139,11 @@ export function AppNav() {
 
   return (
     <>
-      <header
-        className="z-20 flex-none border-b border-border bg-background"
-      >
+      {/* Clear of the status bar and the notch/rounded corners when the app
+          runs full screen (added to the home screen) or in landscape. */}
+      <header className="z-20 flex-none border-b border-border bg-background pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)]">
         <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4">
-          <Link href="/" aria-label="Briefcase home">
+          <Link href="/" aria-label="Briefcase home" className="-my-1.5 py-1.5">
             <BrandLogo variant="compact" />
           </Link>
           <span className="text-sm font-medium text-muted">{MODES[shown].caption}</span>
@@ -152,7 +152,7 @@ export function AppNav() {
 
       <nav
         aria-label="Modes"
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-30 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]"
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-30 pr-[calc(env(safe-area-inset-right)+0.75rem)] pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pl-[calc(env(safe-area-inset-left)+0.75rem)]"
       >
         <div className="pointer-events-auto relative mx-auto max-w-md pt-4">
           {/* The case handle, riveted in brass */}

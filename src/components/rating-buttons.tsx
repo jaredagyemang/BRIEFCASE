@@ -215,7 +215,7 @@ export function RatingButtons({
                 type="button"
                 disabled={pending}
                 onClick={() => toast.undo && undo(toast.undo)}
-                className="rounded-full bg-background/20 px-4 py-1.5 font-semibold disabled:opacity-60"
+                className="hit relative rounded-full bg-background/20 px-4 py-1.5 font-semibold disabled:opacity-60"
               >
                 Undo
               </button>

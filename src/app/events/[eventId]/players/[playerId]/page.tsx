@@ -190,7 +190,7 @@ export default async function EventPlayerPage({ params, searchParams }: PageProp
                 </div>
                 <Link
                   href={eventPlayerPath(a.event.id, playerId)}
-                  className="shrink-0 rounded-full bg-surface-muted px-3 py-1.5 text-sm font-semibold"
+                  className="hit relative shrink-0 rounded-full bg-surface-muted px-3 py-1.5 text-sm font-semibold"
                 >
                   Open
                 </Link>
@@ -239,7 +239,7 @@ export default async function EventPlayerPage({ params, searchParams }: PageProp
   return (
     <div>
       <div className="flex items-center justify-between gap-3">
-        <Link href={eventPath(eventId)} className="min-w-0 truncate text-accent-ink">
+        <Link href={eventPath(eventId)} className="-my-2.5 min-w-0 truncate py-2.5 text-accent-ink">
           ‹ {event.name}
         </Link>
         <div className="flex shrink-0 gap-2">
@@ -250,7 +250,7 @@ export default async function EventPlayerPage({ params, searchParams }: PageProp
           />
           <Link
             href={`${eventPlayerPath(eventId, playerId)}/edit`}
-            className="shrink-0 rounded-full bg-surface-muted px-4 py-1.5 text-sm font-semibold"
+            className="hit relative shrink-0 rounded-full bg-surface-muted px-4 py-1.5 text-sm font-semibold"
           >
             Edit
           </Link>
@@ -305,14 +305,14 @@ export default async function EventPlayerPage({ params, searchParams }: PageProp
           ) : (
             <>
               Status set at{" "}
-              <Link href={eventPlayerPath(statusEvent.id, playerId)} className="font-medium text-accent-ink">
+              <Link href={eventPlayerPath(statusEvent.id, playerId)} className="hit-lg relative font-medium text-accent-ink">
                 {statusEvent.name}
               </Link>
             </>
           )}
         </p>
         {others.length > 0 && (
-          <Link href="?tab=also" scroll={false} className="mt-3 text-sm">
+          <Link href="?tab=also" scroll={false} className="mt-0.5 py-2.5 text-sm">
             <span className="text-muted">Also seen at: </span>
             <span className="font-medium text-accent-ink">{others.map((a) => a.event.name).join(", ")}</span>
           </Link>

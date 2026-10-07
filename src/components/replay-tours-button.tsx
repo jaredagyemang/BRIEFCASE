@@ -25,7 +25,7 @@ export function ReplayToursButton() {
             }
           })
         }
-        className="text-sm font-semibold text-accent-ink disabled:opacity-60"
+        className="px-2 py-2.5 text-sm font-semibold text-accent-ink disabled:opacity-60"
         data-replay-tours
       >
         Replay page tours

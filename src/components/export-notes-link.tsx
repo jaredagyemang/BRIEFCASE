@@ -11,7 +11,7 @@ export function ExportNotesLink({ href }: { href: string }) {
         const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
         if (tz) e.currentTarget.href = `${href}?tz=${encodeURIComponent(tz)}`;
       }}
-      className="shrink-0 text-sm font-semibold text-accent-ink"
+      className="-my-3 shrink-0 py-3 text-sm font-semibold text-accent-ink"
     >
       ⬇︎ Export notes
     </a>

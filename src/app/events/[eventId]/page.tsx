@@ -104,13 +104,13 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
   return (
     <ToursScope seen={tours}>
       <div className="flex items-center justify-between">
-        <Link href="/events" className="text-accent-ink">
+        <Link href="/events" className="-my-2.5 py-2.5 text-accent-ink">
           ‹ Events
         </Link>
         <div className="flex gap-2">
           <Link
             href={`${eventPath(eventId)}/edit`}
-            className="rounded-full bg-surface-muted px-4 py-1.5 text-sm font-semibold"
+            className="hit relative rounded-full bg-surface-muted px-4 py-1.5 text-sm font-semibold"
           >
             Edit
           </Link>
@@ -184,7 +184,7 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ev
               key={chip.value ?? "active"}
               href={chipHref(chip.value)}
               scroll={false}
-              className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium whitespace-nowrap transition-colors ${
+              className={`shrink-0 rounded-full px-3.5 py-2.5 text-sm font-medium whitespace-nowrap transition-colors ${
                 active ? "bg-foreground text-background" : "bg-surface-muted text-muted"
               }`}
             >

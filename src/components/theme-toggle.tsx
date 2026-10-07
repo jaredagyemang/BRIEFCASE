@@ -42,7 +42,7 @@ export function ThemeToggle({ initial }: { initial: Theme }) {
             role="radio"
             aria-checked={selected}
             onClick={() => choose(option.value)}
-            className={`rounded-xl py-2 text-sm font-semibold transition ${
+            className={`rounded-xl py-2.5 text-sm font-semibold transition ${
               selected ? "bg-foreground text-background shadow-sm" : "text-muted"
             }`}
           >

@@ -50,7 +50,7 @@ export default async function DocketCardPage({ params, searchParams }: PageProps
 
   return (
     <PageScroller>
-      <Link href="/docket" className="text-sm font-semibold text-accent-ink">
+      <Link href="/docket" className="-my-2.5 inline-block py-2.5 text-sm font-semibold text-accent-ink">
         ‹ The Docket
       </Link>
       <div className="mt-6 rounded-3xl bg-surface p-6 text-center" data-card-error={result.status}>

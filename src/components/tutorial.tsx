@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { completeTutorialAction } from "@/app/welcome/actions";
 import logoDark from "@/assets/brand/logo-dark.png";
 import { HelpIcon } from "@/components/page-help";
@@ -18,6 +18,17 @@ export function Tutorial({ next }: { next: string }) {
   const last = index === total - 1;
   const finish = () => startFinishing(() => completeTutorialAction(next));
   const go = (to: number) => setIndex(Math.max(0, Math.min(total - 1, to)));
+
+  // ← and → on a keyboard.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (finishing || e.altKey || e.metaKey || e.ctrlKey) return;
+      if (e.key === "ArrowRight") go(index + 1);
+      else if (e.key === "ArrowLeft") go(index - 1);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   // Sideways swipes between screens.
   const touch = useRef<{ x: number; y: number } | null>(null);
@@ -38,7 +49,7 @@ export function Tutorial({ next }: { next: string }) {
       onTouchEnd={onTouchEnd}
       data-tutorial
     >
-      <div className="mx-auto flex h-full w-full max-w-md flex-col px-6 pt-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+      <div className="mx-auto flex h-full w-full max-w-md flex-col px-6 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold text-accent-ink tabular-nums" data-tutorial-progress>
             {index + 1} of {total}
@@ -48,7 +59,7 @@ export function Tutorial({ next }: { next: string }) {
               type="button"
               onClick={finish}
               disabled={finishing}
-              className="py-2 text-sm font-semibold text-muted"
+              className="-my-1 -mr-3 px-3 py-3 text-sm font-semibold text-muted"
             >
               Skip
             </button>

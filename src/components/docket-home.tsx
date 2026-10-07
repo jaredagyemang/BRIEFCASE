@@ -107,7 +107,7 @@ export function DocketHome({
             type="button"
             onClick={reload}
             disabled={loading}
-            className="mt-4 rounded-full bg-surface-muted px-5 py-2 text-sm font-semibold disabled:opacity-60"
+            className="mt-4 rounded-full bg-surface-muted px-5 py-2.5 text-sm font-semibold disabled:opacity-60"
           >
             {loading ? "Trying…" : "Try again"}
           </button>
@@ -190,7 +190,7 @@ export function DocketHome({
                   role="radio"
                   aria-checked={selected}
                   onClick={() => saveRange(r.id)}
-                  className={`rounded-xl px-1 py-2 text-sm font-semibold transition ${
+                  className={`rounded-xl px-1 py-2.5 text-sm font-semibold transition ${
                     selected ? "bg-foreground text-background shadow-sm" : "text-muted"
                   }`}
                 >
@@ -277,7 +277,7 @@ function SpamToggle() {
         aria-checked={on}
         aria-labelledby="check-spam"
         onClick={() => saveCheckSpam(!on)}
-        className={`relative h-7 w-12 shrink-0 rounded-full transition ${on ? "bg-accent" : "bg-surface-muted"}`}
+        className={`hit-lg relative h-7 w-12 shrink-0 rounded-full transition ${on ? "bg-accent" : "bg-surface-muted"}`}
       >
         <span
           className={`absolute top-1 left-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${on ? "translate-x-5" : ""}`}

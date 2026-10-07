@@ -66,10 +66,10 @@ export default async function ProfilePage() {
         </button>
       </form>
 
-      <div className="mt-6" data-tour="profile-replay">
+      <div className="mt-4" data-tour="profile-replay">
         <Link
           href="/welcome?replay=1&next=%2Fprofile"
-          className="block text-center text-sm font-semibold text-accent-ink"
+          className="block py-2.5 text-center text-sm font-semibold text-accent-ink"
           data-replay-tutorial
         >
           Replay tutorial

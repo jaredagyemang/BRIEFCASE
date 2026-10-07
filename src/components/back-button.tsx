@@ -10,7 +10,7 @@ export function BackButton({ label = "‹ Back" }: { label?: string }) {
     <button
       type="button"
       onClick={() => (window.history.length > 1 ? router.back() : router.push("/docket"))}
-      className="text-accent-ink"
+      className="-my-2.5 py-2.5 text-accent-ink"
     >
       {label}
     </button>

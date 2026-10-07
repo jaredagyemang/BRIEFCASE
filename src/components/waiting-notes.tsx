@@ -52,7 +52,7 @@ export function WaitingNotes({
   return (
     <div>
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-        <Link href={eventPath(eventId)} className="truncate text-accent-ink">
+        <Link href={eventPath(eventId)} className="-my-2.5 truncate py-2.5 text-accent-ink">
           ‹ {eventName}
         </Link>
         <h1 className="text-lg font-semibold">Waiting notes</h1>
@@ -204,7 +204,7 @@ function WaitingNoteCard({
             <button
               type="button"
               onClick={() => setAdding(true)}
-              className="rounded-full bg-surface-muted px-3.5 py-1.5 text-sm font-semibold"
+              className="hit relative rounded-full bg-surface-muted px-3.5 py-1.5 text-sm font-semibold"
             >
               + Add as new player
             </button>
@@ -212,7 +212,7 @@ function WaitingNoteCard({
               type="button"
               onClick={() => setConfirmDiscard(true)}
               disabled={pending}
-              className="rounded-full px-3 py-1.5 text-sm font-semibold text-red disabled:opacity-60"
+              className="hit relative rounded-full px-3 py-1.5 text-sm font-semibold text-red disabled:opacity-60"
             >
               Discard
             </button>
