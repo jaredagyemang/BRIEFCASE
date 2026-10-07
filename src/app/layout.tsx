@@ -18,17 +18,32 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Briefcase",
   description: "Lean recruiting for coaches and recruiters.",
+  // Added to an iPhone or iPad Home Screen, it opens full screen as its own
+  // app, named Briefcase, with the status bar above the page (not over it).
+  appleWebApp: { capable: true, title: "Briefcase", statusBarStyle: "default" },
+  // Next.js writes the newer mobile-web-app-capable; older iOS reads this one.
+  other: { "apple-mobile-web-app-capable": "yes" },
 };
 
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-  viewportFit: "cover",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f5f5f7" },
-    { media: "(prefers-color-scheme: dark)", color: "#000000" },
-  ],
-};
+const BACKGROUND = { light: "#f5f5f7", dark: "#000000" };
+
+// The status bar (and browser bar) takes the page's background: the theme
+// picked on Profile, or the device's setting on Auto.
+export async function generateViewport(): Promise<Viewport> {
+  const theme = parseTheme((await cookies()).get(THEME_COOKIE)?.value);
+  return {
+    width: "device-width",
+    initialScale: 1,
+    viewportFit: "cover",
+    themeColor:
+      theme === "system"
+        ? [
+            { media: "(prefers-color-scheme: light)", color: BACKGROUND.light },
+            { media: "(prefers-color-scheme: dark)", color: BACKGROUND.dark },
+          ]
+        : BACKGROUND[theme],
+  };
+}
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const cookieStore = await cookies();

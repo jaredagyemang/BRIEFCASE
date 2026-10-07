@@ -34,6 +34,7 @@ import {
 import { PLATFORM_LABEL, googleDocPreview, uniqueMedia, youtubeVideo, type FoundLink } from "@/lib/gmail/links";
 import { TEMPLATE_LABEL, buildReply } from "@/lib/gmail/templates";
 import { timeAgo } from "@/lib/time";
+import { ConnectMailLink } from "@/components/connect-mail-link";
 
 // The Docket's review feed, for the time range chosen on its home screen:
 // one row per player (per email), newest first. Swipe up/down to move between
@@ -74,12 +75,12 @@ export function DocketFeed({
             : result.message}
         </p>
         {expired ? (
-          <a
+          <ConnectMailLink
             href={mail.connectPath}
             className="mt-4 inline-block rounded-2xl bg-accent px-6 py-3 font-semibold text-accent-foreground"
           >
             Reconnect {mail.name}
-          </a>
+          </ConnectMailLink>
         ) : (
           <button
             type="button"
@@ -1181,12 +1182,12 @@ function DeleteSheet({
           <p className="text-center text-sm text-muted">
             To delete emails, Briefcase needs permission to move them to {mail.trash}. Reconnect once and allow it.
           </p>
-          <a
+          <ConnectMailLink
             href={mail.connectPath}
             className="block w-full rounded-2xl bg-accent py-3.5 text-center font-semibold text-accent-foreground"
           >
             Reconnect {mail.name}
-          </a>
+          </ConnectMailLink>
           <SheetButton onClick={onClose}>Cancel</SheetButton>
         </>
       ) : (
@@ -1248,12 +1249,12 @@ function ReplySheet({
           <p className="text-center text-sm text-muted">
             To send replies, Briefcase needs permission to send email from your {mail.name}. Reconnect once and allow it.
           </p>
-          <a
+          <ConnectMailLink
             href={mail.connectPath}
             className="block w-full rounded-2xl bg-accent py-3.5 text-center font-semibold text-accent-foreground"
           >
             Reconnect {mail.name}
-          </a>
+          </ConnectMailLink>
           <SheetButton onClick={onClose}>Cancel</SheetButton>
         </>
       ) : (

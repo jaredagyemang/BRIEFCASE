@@ -7,6 +7,7 @@ import { getConnectionSummary } from "@/lib/gmail/connection";
 import { loadDocketCard } from "@/lib/gmail/docket";
 import { mailLabels } from "@/lib/mail/labels";
 import { getCurrentUser } from "@/lib/staff";
+import { ConnectMailLink } from "@/components/connect-mail-link";
 
 // One player's Info card and video(s) on their own, opened from The Docket's
 // search or staff activity. ?from=search or ?from=activity makes ‹ Back return
@@ -57,12 +58,12 @@ export default async function DocketCardPage({ params, searchParams }: PageProps
         <p className="font-semibold">{message.title}</p>
         <p className="mt-1 text-sm text-muted">{message.text}</p>
         {result.status === "expired" && (
-          <a
+          <ConnectMailLink
             href={mail.connectPath}
             className="mt-4 inline-block rounded-2xl bg-accent px-6 py-3 font-semibold text-accent-foreground"
           >
             Reconnect {mail.name}
-          </a>
+          </ConnectMailLink>
         )}
       </div>
     </PageScroller>

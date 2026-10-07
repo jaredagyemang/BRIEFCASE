@@ -9,6 +9,7 @@ import {
   outlookAddress,
   outlookCanRead,
 } from "@/lib/gmail/outlook";
+import { handoffPage, isSignedIn, resultRedirect } from "@/lib/mail/connect-window";
 
 // Microsoft sends the coach back here after its sign-in and consent screen.
 // The result is reported on The Docket via ?outlook=…
@@ -20,10 +21,12 @@ export async function GET(request: NextRequest) {
   const { origin, searchParams } = request.nextUrl;
 
   if (searchParams.has("admin_consent")) return approvedPage(searchParams.get("admin_consent") === "True");
+  // Back somewhere without the coach's sign-in (see handoffPage).
+  if (!(await isSignedIn())) return handoffPage("outlook");
 
   // `reason`: exactly what went wrong, shown on The Docket (and logged).
   const back = (result: string, reason?: string) => {
-    const response = NextResponse.redirect(new URL(`/docket?outlook=${result}`, origin));
+    const response = resultRedirect(request, "outlook", result);
     response.cookies.delete({ name: OUTLOOK_STATE_COOKIE, path: "/api/auth/outlook" });
     if (reason) {
       console.error(`Connecting Outlook: ${result}:`, reason);

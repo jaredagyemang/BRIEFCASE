@@ -14,6 +14,7 @@ import { EVENTS_SORT_COOKIE, EVENTS_SORTS, parseSort } from "@/lib/sort";
 import { seenTours } from "@/lib/tours";
 import { createClient } from "@/lib/supabase/server";
 import { timeAgo } from "@/lib/time";
+import { HomeScreenNote } from "@/components/home-screen-note";
 
 type EventWithCount = Event & { event_players: { count: number }[] };
 
@@ -58,6 +59,7 @@ export default async function EventsPage({ searchParams }: PageProps<"/events">)
       {passwordUpdated && (
         <p role="status" className="mt-4 rounded-2xl bg-green/15 px-4 py-3 text-sm font-medium">
           ✅ Password updated. You’re signed in.
+          <HomeScreenNote />
         </p>
       )}
 
