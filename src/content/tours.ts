@@ -15,11 +15,17 @@ export const TOURS: Record<TourKey, PageHelp> = {
   docket: {
     title: "The Docket",
     steps: [
-      { target: "docket-search", text: "Search any player from your Docket, even ones you skipped or replied to." },
+      {
+        target: "docket-search",
+        text: "Search any player in your Docket, even ones you skipped or replied to. × clears it; ‹ The Docket takes you back.",
+      },
       { target: "docket-range", text: "Pick how far back to look. The count below shows new players in that time." },
       { target: "docket-start", text: "Start Reviewing opens your feed of Info Cards for that time range." },
-      { target: "docket-lists", text: "The Shortlist and Shared with team. Your whole staff sees both lists." },
-      { target: "docket-menu", text: "Check for new emails, open your lists, or disconnect your email." },
+      {
+        target: "docket-lists",
+        text: "View Shortlist and View Shared with team: your staff’s two lists, with each player’s videos ready to play.",
+      },
+      { target: "docket-menu", text: "Check for new links, open the Shortlist or Shared with team, or disconnect your email." },
     ],
     details: [
       {
@@ -32,7 +38,7 @@ export const TOURS: Record<TourKey, PageHelp> = {
       },
       {
         term: "Search",
-        text: "Searches the Info Cards in your Docket by name, sender or subject. If a player isn’t there, “Search Gmail for …” (or Outlook) looks through your whole mailbox.",
+        text: "Searches the Info Cards in your Docket by name, sender or subject. If a player isn’t there, “Search Gmail for …” (or Outlook) looks through your whole mailbox. Tap × to clear the search, or ‹ The Docket to go back.",
       },
       {
         term: "Staff activity",
@@ -92,7 +98,7 @@ export const TOURS: Record<TourKey, PageHelp> = {
       },
       {
         term: "Videos",
-        text: "YouTube and Google Docs open right in the card. Hudl and Veo open in their own apps. SportsRecruits profiles open on SportsRecruits when you tap the button on the card.",
+        text: "YouTube plays right in the card, and on the Shortlist and Shared with team; “Open on YouTube” takes you to YouTube instead. If a video can’t play inside BRIEFCASE (its owner doesn’t allow it, or it’s private or removed), you’ll see a short message and an Open on YouTube button. Google Docs show a preview in the card. Hudl and Veo open in their own apps. SportsRecruits profiles open from the “Open in SportsRecruits” button on the card.",
       },
     ],
   },
