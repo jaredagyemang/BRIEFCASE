@@ -3,6 +3,8 @@
 // data-tour="…" on that page, and is skipped when that element isn't on
 // screen (e.g. no events yet). Keep tours to 5 steps or fewer.
 
+import { LIFECYCLE_STATUSES } from "@/lib/players";
+
 export const TOUR_KEYS = ["docket", "docket-connect", "docket-review", "events", "event", "profile"] as const;
 export type TourKey = (typeof TOUR_KEYS)[number];
 
@@ -26,7 +28,7 @@ export const TOURS: Record<TourKey, PageHelp> = {
       },
       {
         term: "Also check Spam",
-        text: "Also looks in Spam (Junk in Outlook). Only emails the AI judges to be about recruiting come through, marked “Found in Spam”.",
+        text: "Looks in your Spam folder too (Junk in Outlook). Only emails the AI judges to be about recruiting come through, labeled “Found in Spam” (“Found in Junk” in Outlook).",
       },
       {
         term: "Search",
@@ -140,7 +142,10 @@ export const TOURS: Record<TourKey, PageHelp> = {
       },
       {
         term: "Statuses",
-        text: "Unscreened, Watch Again / Needs Film, Needs Staff Review, To Be Contacted, In Communication, Campus Visit / Offered, Committed and No Longer Pursuing. Set a player’s status on their page.",
+        // Built from the status dropdown's own list, so the two always match.
+        text: `${LIFECYCLE_STATUSES.slice(0, -1)
+          .map((s) => s.label)
+          .join(", ")} and ${LIFECYCLE_STATUSES.at(-1)!.label}. Set a player’s status on their page.`,
       },
       {
         term: "Export notes",
