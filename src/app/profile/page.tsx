@@ -11,6 +11,7 @@ import { getCurrentUser } from "@/lib/staff";
 import { THEME_COOKIE, parseTheme } from "@/lib/theme";
 import { seenTours } from "@/lib/tours";
 import { NameForm } from "./name-form";
+import { ReportProblemLink } from "@/components/report-problem";
 
 export default async function ProfilePage() {
   const [user, gmail] = await Promise.all([getCurrentUser(), getConnectionSummary()]);
@@ -75,6 +76,9 @@ export default async function ProfilePage() {
           Replay tutorial
         </Link>
         <ReplayToursButton />
+      </div>
+      <div className="text-center" data-tour="profile-report">
+        <ReportProblemLink />
       </div>
       <p className="mt-4 text-center text-xs text-muted">Version {process.env.APP_VERSION}</p>
     </ToursScope>

@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { markTourSeenAction } from "@/app/tour-actions";
+import { ReportProblemSheet } from "@/components/report-problem";
 import { Sheet, SheetButton } from "@/components/sheet";
 import { TOURS, type TourKey, type TourStep } from "@/content/tours";
 
@@ -39,6 +40,7 @@ export function PageHelp({ tour, className = "" }: { tour: TourKey; className?: 
   const seen = useContext(ToursContext);
   const [steps, setSteps] = useState<TourStep[] | null>(null);
   const [open, setOpen] = useState(false);
+  const [reporting, setReporting] = useState(false);
 
   const start = useCallback(() => {
     const available = help.steps.filter((s) => findTarget(s.target));
@@ -109,8 +111,20 @@ export function PageHelp({ tour, className = "" }: { tour: TourKey; className?: 
             Show me around
           </SheetButton>
           <SheetButton onClick={() => setOpen(false)}>Close</SheetButton>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              setReporting(true);
+            }}
+            className="block w-full py-2.5 text-center text-sm font-semibold text-accent-ink"
+            data-report-problem
+          >
+            Report a problem
+          </button>
         </Sheet>
       )}
+      {reporting && <ReportProblemSheet onClose={() => setReporting(false)} />}
       {steps && <Spotlight steps={steps} onDone={() => setSteps(null)} />}
     </>
   );

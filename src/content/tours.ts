@@ -160,6 +160,7 @@ export const TOURS: Record<TourKey, PageHelp> = {
       { target: "profile-email", text: "Connect, switch or disconnect the email The Docket reads." },
       { target: "profile-appearance", text: "Choose Light, Dark, or Auto to match your phone." },
       { target: "profile-replay", text: "Replay the tutorial or these page tours anytime." },
+      { target: "profile-report", text: "Something not working? Report a problem here, or from any page’s ? help." },
     ],
     details: [
       {
@@ -169,6 +170,10 @@ export const TOURS: Record<TourKey, PageHelp> = {
       {
         term: "Replay page tours",
         text: "Shows each page’s quick tour again the next time you open that page.",
+      },
+      {
+        term: "Report a problem",
+        text: "Tell us when something isn’t working (also from “Report a problem” in any page’s ? help). We get what you write, the page you were on, your device and browser, and the app version. Please don’t include player names or contact details.",
       },
     ],
   },
