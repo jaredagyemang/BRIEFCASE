@@ -16,6 +16,7 @@ import { PageScroller } from "@/components/page-scroller";
 import { Sheet, SheetButton, SheetTitle } from "@/components/sheet";
 import { useMail } from "@/components/mail-provider";
 import { PageHelp } from "@/components/page-help";
+import { OPEN_ON_YOUTUBE, YouTubePlayer } from "@/components/youtube-player";
 import { disconnectText } from "@/lib/mail/labels";
 import { clearDocketCache, useDocket } from "@/components/use-docket";
 import {
@@ -451,7 +452,7 @@ function formatDate(iso: string | null) {
 }
 
 const OPEN_LABEL = {
-  youtube: "Open in YouTube",
+  youtube: OPEN_ON_YOUTUBE,
   hudl: "Open in Hudl",
   veo: "Open in Veo",
   gdoc: "Open in Google Docs",
@@ -1403,73 +1404,8 @@ function YouTubeMedia({ url, active }: { url: string; active: boolean }) {
   const box = video?.vertical
     ? "aspect-[9/16] h-full max-w-full"
     : "aspect-video w-full max-w-[min(56rem,calc((100dvh-26rem-env(safe-area-inset-bottom))*16/9))]";
-  if (!video) return <OpenElsewhere item={{ platform: "youtube", url }} />;
-  return (
-    <div className={`relative ${box}`}>
-      <div className="absolute inset-0 overflow-hidden rounded-2xl bg-white/5">
-        {active ? (
-          <iframe
-            src={video.embedUrl}
-            title="YouTube video"
-            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-            allowFullScreen
-            referrerPolicy="strict-origin-when-cross-origin"
-            className="absolute inset-0 h-full w-full"
-          />
-        ) : (
-          video.thumbnail && (
-            // eslint-disable-next-line @next/next/no-img-element -- a remote thumbnail placeholder
-            <img src={video.thumbnail} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover opacity-80" />
-          )
-        )}
-      </div>
-      {/* Mounted afresh each time this card's video starts. */}
-      {active && <UnmuteHint inside={video.vertical} />}
-    </div>
-  );
-}
-
-// Videos start muted (phones only let them start by themselves that way), so
-// a small reminder fades in as each one starts and fades out again. It points
-// at YouTube's own speaker button, which sits in the video's top-left corner
-// while it plays muted: just above that corner, or beside it inside a tall
-// Short (which has no room above). It never covers the button, and taps pass
-// straight through it.
-const HINT_SHOWN_FOR = 2500;
-
-function UnmuteHint({ inside }: { inside: boolean }) {
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    const show = requestAnimationFrame(() => setVisible(true));
-    const hide = setTimeout(() => setVisible(false), HINT_SHOWN_FOR);
-    return () => {
-      cancelAnimationFrame(show);
-      clearTimeout(hide);
-    };
-  }, []);
-  return (
-    <p
-      role="status"
-      data-unmute-hint
-      className={`pointer-events-none absolute rounded-full bg-black/80 px-3.5 py-1.5 text-sm font-medium whitespace-nowrap text-white/90 ring-1 ring-white/15 backdrop-blur-sm motion-safe:transition-opacity motion-safe:duration-500 ${
-        inside ? "top-3 left-16" : "bottom-full left-1 mb-2.5"
-      } ${visible ? "opacity-100" : "opacity-0"}`}
-    >
-      {/* Little pointer toward the speaker button: down at the corner, or
-          left at the button beside it. */}
-      <span
-        aria-hidden
-        className={`absolute h-2.5 w-2.5 rotate-45 border-white/15 bg-black ${
-          inside ? "top-1/2 -left-[5px] -translate-y-1/2 border-b border-l" : "-bottom-[5px] left-5 border-r border-b"
-        }`}
-      />
-      <span className="sr-only">Video is playing muted. </span>
-      <span className="relative">
-        Tap <span aria-hidden>🔇</span>
-        <span className="sr-only">the speaker button</span> to unmute
-      </span>
-    </p>
-  );
+  // Shared with the Shortlist, Shared with team and staff activity.
+  return <YouTubePlayer url={url} active={active} box={box} />;
 }
 
 // A read-only preview of the Doc. Swipes pass straight over it; the "Open in
