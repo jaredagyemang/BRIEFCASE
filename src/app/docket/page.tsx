@@ -1,10 +1,10 @@
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { CopyButton } from "@/components/copy-button";
 import { DocketHome } from "@/components/docket-home";
 import { MailProviderScope } from "@/components/mail-provider";
 import { PageScroller } from "@/components/page-scroller";
 import { getConnectionSummary } from "@/lib/gmail/connection";
-import { adminConsentUrl } from "@/lib/gmail/outlook";
+import { OUTLOOK_ERROR_COOKIE, adminConsentUrl } from "@/lib/gmail/outlook";
 
 type Message = { tone: "good" | "bad"; text: string };
 
@@ -48,6 +48,9 @@ export default async function DocketPage({ searchParams }: PageProps<"/docket">)
         ? OUTLOOK_MESSAGES[outlookResult]
         : undefined;
   const connection = await getConnectionSummary();
+  // Exactly why connecting Outlook didn't work (from Microsoft or the database).
+  const reason =
+    outlookResult && outlookResult !== "connected" ? (await cookies()).get(OUTLOOK_ERROR_COOKIE)?.value : undefined;
 
   if (connection) {
     return (
@@ -73,9 +76,14 @@ export default async function DocketPage({ searchParams }: PageProps<"/docket">)
           }`}
         >
           {message.text}
+          {reason && (
+            <span className="mt-2 block font-mono text-xs break-words whitespace-pre-wrap" data-connect-reason>
+              Details: {reason}
+            </span>
+          )}
         </p>
       )}
-      {outlookResult === "admin-approval" && <SchoolApproval />}
+      {outlookResult === "admin-approval" && <SchoolApproval reason={reason} />}
 
       <ConnectCard />
     </PageScroller>
@@ -113,7 +121,7 @@ function ConnectCard() {
 
 // The coach's school only lets administrators approve apps that read mail:
 // a note to forward to IT, with the link that approves Briefcase for the school.
-async function SchoolApproval() {
+async function SchoolApproval({ reason }: { reason?: string }) {
   const h = await headers();
   const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("x-forwarded-host") ?? h.get("host")}`;
   let link: string;
@@ -134,6 +142,11 @@ async function SchoolApproval() {
         {note}
       </p>
       <CopyButton text={note} label="Copy note for IT" />
+      {reason && (
+        <p className="mt-3 font-mono text-xs break-words whitespace-pre-wrap text-muted" data-connect-reason>
+          Details: {reason}
+        </p>
+      )}
     </div>
   );
 }

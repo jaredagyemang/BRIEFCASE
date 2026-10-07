@@ -1,7 +1,14 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { saveConnection } from "@/lib/gmail/connection";
-import { OUTLOOK_STATE_COOKIE, exchangeOutlookCode, outlookAddress, outlookCanRead } from "@/lib/gmail/outlook";
+import {
+  OUTLOOK_ERROR_COOKIE,
+  OUTLOOK_STATE_COOKIE,
+  errorDetail,
+  exchangeOutlookCode,
+  outlookAddress,
+  outlookCanRead,
+} from "@/lib/gmail/outlook";
 
 // Microsoft sends the coach back here after its sign-in and consent screen.
 // The result is reported on The Docket via ?outlook=…
@@ -14,9 +21,22 @@ export async function GET(request: NextRequest) {
 
   if (searchParams.has("admin_consent")) return approvedPage(searchParams.get("admin_consent") === "True");
 
-  const back = (result: string) => {
+  // `reason`: exactly what went wrong, shown on The Docket (and logged).
+  const back = (result: string, reason?: string) => {
     const response = NextResponse.redirect(new URL(`/docket?outlook=${result}`, origin));
     response.cookies.delete({ name: OUTLOOK_STATE_COOKIE, path: "/api/auth/outlook" });
+    if (reason) {
+      console.error(`Connecting Outlook: ${result}:`, reason);
+      response.cookies.set(OUTLOOK_ERROR_COOKIE, reason.slice(0, 600), {
+        httpOnly: true,
+        secure: request.nextUrl.protocol === "https:",
+        sameSite: "lax",
+        path: "/docket",
+        maxAge: 120,
+      });
+    } else {
+      response.cookies.delete({ name: OUTLOOK_ERROR_COOKIE, path: "/docket" });
+    }
     return response;
   };
 
@@ -27,34 +47,50 @@ export async function GET(request: NextRequest) {
     expected.length > 0 &&
     expected.length === received.length &&
     timingSafeEqual(Buffer.from(expected), Buffer.from(received));
-  if (!stateOk) return back("failed");
+  if (!stateOk) {
+    return back(
+      "failed",
+      expected
+        ? "The sign-in check didn’t match (state mismatch). Start again from Connect Outlook in this same browser tab."
+        : "The sign-in check cookie was missing (state cookie). It lasts 10 minutes and only works on the web address you started from (e.g. not localhost in one place and 127.0.0.1 in another). Start again from Connect Outlook.",
+    );
+  }
 
   const error = searchParams.get("error");
   if (error) {
     const detail = searchParams.get("error_description") ?? "";
-    console.error("Outlook sign-in returned an error", error, detail.split("\n")[0]);
+    const reason = `Microsoft returned: ${error}${detail ? ` — ${detail.split(/\r?\n/)[0]}` : ""}`;
     // The school only lets administrators approve apps that read mail.
-    if (/AADSTS(65001|90094|90095|90099)/.test(detail) || error === "consent_required") return back("admin-approval");
+    if (/AADSTS(65001|90094|90095|90099)/.test(detail) || error === "consent_required") {
+      return back("admin-approval", reason);
+    }
     // The school's security rules (Conditional Access) blocked the sign-in.
-    if (/AADSTS(53003|53000|53001|50105|530032)/.test(detail)) return back("blocked");
+    if (/AADSTS(53003|53000|53001|50105|530032)/.test(detail)) return back("blocked", reason);
     // "Cancel" or "No" on Microsoft's screen.
-    if (error === "access_denied") return back("denied");
-    return back("failed");
+    if (error === "access_denied") return back("denied", reason);
+    return back("failed", reason);
   }
 
   const code = searchParams.get("code");
-  if (!code) return back("failed");
+  if (!code) return back("failed", "Microsoft sent the coach back without a sign-in code or an error.");
 
   try {
     const tokens = await exchangeOutlookCode(code, origin);
-    if (!outlookCanRead(tokens.scope)) return back("missing-permission");
+    if (!outlookCanRead(tokens.scope)) {
+      return back("missing-permission", `Microsoft granted only these permissions: ${tokens.scope || "(none)"}`);
+    }
+    if (!tokens.refresh_token) {
+      return back(
+        "failed",
+        `Microsoft didn’t return a refresh token (is offline_access added under API permissions in Entra?). Granted: ${tokens.scope}`,
+      );
+    }
     const address = await outlookAddress(tokens.access_token);
-    if (!tokens.refresh_token || !address) {
-      console.error("Microsoft didn't return a refresh token or address", {
-        refresh: Boolean(tokens.refresh_token),
-        address: Boolean(address),
-      });
-      return back("failed");
+    if (!address) {
+      return back(
+        "failed",
+        "Microsoft didn’t return an email address for this account (Graph /me has no mail or userPrincipalName).",
+      );
     }
     await saveConnection({
       provider: "microsoft",
@@ -66,8 +102,7 @@ export async function GET(request: NextRequest) {
     });
     return back("connected");
   } catch (error) {
-    console.error("Connecting Outlook failed", error);
-    return back("failed");
+    return back("failed", errorDetail(error));
   }
 }
 

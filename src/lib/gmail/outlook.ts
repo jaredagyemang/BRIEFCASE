@@ -24,6 +24,21 @@ const GRAPH_URL = process.env.GRAPH_API_URL ?? "https://graph.microsoft.com/v1.0
 const TENANT = "common";
 
 export const OUTLOOK_STATE_COOKIE = "outlook_oauth_state";
+// Why connecting failed, in Microsoft's (or the database's) own words, for
+// The Docket to show. A private cookie rather than the address, so nobody can
+// put made-up text on the page with a crafted link.
+export const OUTLOOK_ERROR_COOKIE = "outlook_connect_error";
+
+// The exact reason behind an error (e.g. "AADSTS7000215: Invalid client
+// secret provided."), shown when connecting fails.
+export const errorDetail = (error: unknown): string =>
+  error && typeof error === "object" && "detail" in error && typeof error.detail === "string"
+    ? error.detail
+    : error instanceof Error
+      ? error.message
+      : String(error);
+
+const firstLine = (s: unknown) => (typeof s === "string" ? s.split(/\r?\n/)[0] : "");
 
 // The smallest set that covers reading, replying, and moving mail to Deleted
 // Items (Mail.Read can't move anything). offline_access keeps reading without
@@ -33,12 +48,11 @@ export const outlookCanRead = (scopes: string) => /(^|[\s/])Mail\.ReadWrite(\s|$
 export const outlookCanSend = (scopes: string) => /(^|[\s/])Mail\.Send(\s|$)/i.test(scopes);
 
 function credentials() {
-  const clientId = process.env.MICROSOFT_CLIENT_ID;
-  const clientSecret = process.env.MICROSOFT_CLIENT_SECRET;
-  if (!clientId || !clientSecret) {
-    throw new Error("Outlook isn't set up: MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET are missing.");
-  }
-  return { clientId, clientSecret };
+  const clientId = process.env.MICROSOFT_CLIENT_ID?.trim();
+  const clientSecret = process.env.MICROSOFT_CLIENT_SECRET?.trim();
+  const missing = [!clientId && "MICROSOFT_CLIENT_ID", !clientSecret && "MICROSOFT_CLIENT_SECRET"].filter(Boolean);
+  if (missing.length) throw new Error(`Outlook isn't set up: ${missing.join(" and ")} missing on the server.`);
+  return { clientId: clientId!, clientSecret: clientSecret! };
 }
 
 // Must match a redirect URI registered in Entra (Authentication → Web).
@@ -90,14 +104,16 @@ async function tokenRequest(body: Record<string, string>): Promise<TokenResponse
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
-    console.error("Microsoft token request failed", res.status, json.error, json.error_codes);
+    console.error("Microsoft token request failed", res.status, json.error, json.error_codes, firstLine(json.error_description));
     // Expired, revoked, or the school now requires something the saved
     // connection can't do (e.g. sign in again): treated as "reconnect".
     const gone = json.error === "invalid_grant" || json.error === "interaction_required";
-    throw new GoogleAuthError(
-      json.error_description ?? "Microsoft sign-in failed.",
-      gone ? "invalid_grant" : json.error,
-    );
+    const error = new GoogleAuthError(json.error_description ?? "Microsoft sign-in failed.", gone ? "invalid_grant" : json.error);
+    throw Object.assign(error, {
+      detail: `Microsoft token request failed (HTTP ${res.status}): ${json.error ?? "unknown error"}${
+        json.error_description ? ` — ${firstLine(json.error_description)}` : ""
+      }`,
+    });
   }
   return json as TokenResponse;
 }
@@ -131,12 +147,22 @@ async function graph<T>(path: string, accessToken: string, body?: unknown): Prom
     body: body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(20_000),
   });
-  if (res.status === 401) throw new GmailUnauthorizedError("Outlook rejected the access token.");
-  if (res.status === 403) throw new GmailScopeError("This Outlook connection can't do that. Reconnect Outlook.");
-  if (res.status === 404) throw new GmailNotFoundError("That email is no longer in Outlook.");
   if (!res.ok) {
-    console.error("Microsoft Graph request failed", path.split("?")[0], res.status, await res.text().catch(() => ""));
-    throw new Error("Couldn't read Outlook right now. Try again in a moment.");
+    // Graph's own reason, e.g. "ErrorAccessDenied: Access is denied."
+    const text = await res.text().catch(() => "");
+    let reason = text.slice(0, 300);
+    try {
+      const e = JSON.parse(text).error;
+      if (e?.code) reason = `${e.code}${e.message ? `: ${e.message}` : ""}`;
+    } catch {}
+    const detail = `Microsoft Graph ${path.split("?")[0]} failed (HTTP ${res.status})${reason ? `: ${reason}` : ""}`;
+    const withDetail = <E extends Error>(error: E) => Object.assign(error, { detail });
+    if (res.status === 401) throw withDetail(new GmailUnauthorizedError("Outlook rejected the access token."));
+    if (res.status === 403)
+      throw withDetail(new GmailScopeError("This Outlook connection can't do that. Reconnect Outlook."));
+    if (res.status === 404) throw withDetail(new GmailNotFoundError("That email is no longer in Outlook."));
+    console.error(detail);
+    throw withDetail(new Error("Couldn't read Outlook right now. Try again in a moment."));
   }
   if (res.status === 202 || res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
