@@ -34,7 +34,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   {
     visual: "lists",
     title: "Shortlist or Share to team",
-    body: "☆ Shortlist adds a player to the staff Shortlist: the players you’re pursuing. ↗ Share to team posts them to Shared with team with an optional note. Your whole staff sees both lists.",
+    body: "☆ Shortlist adds a player to the staff Shortlist: the players you’re pursuing. ↗ Share to team posts them to Shared with team with an optional note. Your whole staff sees both lists, and their videos play right there.",
   },
   {
     visual: "help",
