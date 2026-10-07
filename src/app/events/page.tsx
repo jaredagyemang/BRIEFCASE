@@ -183,7 +183,7 @@ async function SearchResults({ q }: { q: string }) {
                   <Link
                     key={event.id}
                     href={eventPlayerPath(event.id, p.id)}
-                    className="flex items-center gap-1.5 rounded-full bg-surface-muted px-3 py-1.5 text-sm font-medium"
+                    className="hit relative flex items-center gap-1.5 rounded-full bg-surface-muted px-3 py-1.5 text-sm font-medium"
                   >
                     <span
                       className={`h-2.5 w-2.5 rounded-full ${traffic_light ? TRAFFIC_LIGHT_DOT[traffic_light] : "border border-muted"}`}

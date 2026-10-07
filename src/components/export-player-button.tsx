@@ -40,7 +40,7 @@ export function ExportPlayerButton({
           setHistory(false);
           setOpen(true);
         }}
-        className="shrink-0 rounded-full bg-surface-muted px-4 py-1.5 text-sm font-semibold"
+        className="hit relative shrink-0 rounded-full bg-surface-muted px-4 py-1.5 text-sm font-semibold"
       >
         ⬇︎ Export
       </button>

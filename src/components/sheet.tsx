@@ -2,7 +2,8 @@
 
 import { useEffect } from "react";
 
-// Bottom sheet on phones, centered dialog on larger screens.
+// Bottom sheet on phones, centered dialog on larger screens. It scrolls if
+// it's taller than the screen (e.g. an iPad in landscape with the keyboard up).
 export function Sheet({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -21,7 +22,7 @@ export function Sheet({ children, onClose }: { children: React.ReactNode; onClos
       <div
         role="dialog"
         aria-modal="true"
-        className="relative w-full max-w-md space-y-3 rounded-t-3xl bg-surface p-5 text-foreground pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl sm:rounded-3xl"
+        className="relative max-h-[calc(100dvh-env(safe-area-inset-top)-1rem)] w-full max-w-md space-y-3 overflow-y-auto overscroll-contain rounded-t-3xl bg-surface p-5 text-foreground pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:rounded-3xl"
       >
         <div className="mx-auto mb-2 h-1.5 w-10 rounded-full bg-border sm:hidden" />
         {children}

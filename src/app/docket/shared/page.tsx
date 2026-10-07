@@ -7,7 +7,7 @@ import { SnapshotListView } from "@/components/snapshot-list";
 export default function SharedWithTeamPage() {
   return (
     <PageScroller>
-      <Link href="/docket" className="text-accent-ink">
+      <Link href="/docket" className="-my-2.5 inline-block py-2.5 text-accent-ink">
         ‹ The Docket
       </Link>
       <h1 className="mt-3 text-3xl font-bold tracking-tight">Shared with team</h1>

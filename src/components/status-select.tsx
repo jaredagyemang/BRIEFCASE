@@ -30,7 +30,7 @@ export function StatusSelect({
             await updatePlayerStatus(eventId, playerId, next);
           });
         }}
-        className={`appearance-none rounded-full py-2 pr-9 pl-4 text-sm font-semibold outline-none focus:ring-4 focus:ring-accent/20 ${statusMeta(optimisticStatus).pill}`}
+        className={`appearance-none rounded-full py-2.5 pr-9 pl-4 text-sm font-semibold outline-none focus:ring-4 focus:ring-accent/20 ${statusMeta(optimisticStatus).pill}`}
       >
         {LIFECYCLE_STATUSES.map((s) => (
           <option key={s.value} value={s.value}>

@@ -335,7 +335,7 @@ export function NotesScanner({
               setSaved(null);
               setStage("capture");
             }}
-            className="mt-4 text-sm font-semibold text-accent-ink"
+            className="mt-1 px-2 py-3 text-sm font-semibold text-accent-ink"
           >
             Scan more notes
           </button>
@@ -391,7 +391,7 @@ export function NotesScanner({
                     type="button"
                     onClick={() => removePage(page)}
                     aria-label={`Remove page ${i + 1}`}
-                    className="absolute top-1.5 right-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-sm text-white"
+                    className="hit-lg absolute top-1.5 right-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-sm text-white"
                   >
                     ✕
                   </button>
@@ -481,7 +481,7 @@ export function NotesScanner({
                 <button
                   type="button"
                   onClick={() => removePage(page)}
-                  className="rounded-full px-3 py-1.5 text-sm font-semibold text-muted"
+                  className="hit relative rounded-full px-3 py-1.5 text-sm font-semibold text-muted"
                 >
                   Remove
                 </button>
@@ -494,7 +494,7 @@ export function NotesScanner({
                 <button
                   type="button"
                   onClick={() => read([page])}
-                  className="mt-2 rounded-full bg-surface px-4 py-1.5 font-semibold"
+                  className="hit relative mt-2 rounded-full bg-surface px-4 py-1.5 font-semibold"
                 >
                   Try again
                 </button>
@@ -547,7 +547,7 @@ export function NotesScanner({
                         type="button"
                         onClick={() => removeNote(n.id)}
                         aria-label={`Remove ${label.toLowerCase()}`}
-                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg text-muted active:bg-surface-muted"
+                        className="hit relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg text-muted active:bg-surface-muted"
                       >
                         ✕
                       </button>
@@ -577,7 +577,7 @@ export function NotesScanner({
                         <button
                           type="button"
                           onClick={() => setAdding(n)}
-                          className="rounded-full bg-surface-muted px-3.5 py-1.5 text-sm font-semibold"
+                          className="hit relative rounded-full bg-surface-muted px-3.5 py-1.5 text-sm font-semibold"
                         >
                           + Add as new player
                         </button>
@@ -585,7 +585,7 @@ export function NotesScanner({
                           <button
                             type="button"
                             onClick={() => updateNote(n.id, { wait: false })}
-                            className="rounded-full px-3.5 py-1.5 text-sm font-semibold text-accent-ink"
+                            className="hit relative rounded-full px-3.5 py-1.5 text-sm font-semibold text-accent-ink"
                           >
                             Undo hold
                           </button>
@@ -594,7 +594,7 @@ export function NotesScanner({
                             <button
                               type="button"
                               onClick={() => updateNote(n.id, { wait: true, playerId: null })}
-                              className="rounded-full bg-surface-muted px-3.5 py-1.5 text-sm font-semibold"
+                              className="hit relative rounded-full bg-surface-muted px-3.5 py-1.5 text-sm font-semibold"
                             >
                               ⏳ Hold for later
                             </button>
@@ -698,7 +698,7 @@ function BottomBar({ children }: { children: React.ReactNode }) {
 function Header({ eventId, eventName }: { eventId: string; eventName: string }) {
   return (
     <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-      <Link href={eventPath(eventId)} className="truncate text-accent-ink">
+      <Link href={eventPath(eventId)} className="-my-2.5 truncate py-2.5 text-accent-ink">
         ‹ {eventName}
       </Link>
       <h1 className="text-lg font-semibold">Scan notes</h1>

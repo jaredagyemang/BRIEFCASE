@@ -349,7 +349,7 @@ export function RosterScanner({
               <button
                 type="button"
                 onClick={() => switchSource("photo")}
-                className="mt-4 text-sm font-semibold text-accent-ink"
+                className="mt-1 px-2 py-3 text-sm font-semibold text-accent-ink"
               >
                 📷 Use a photo instead
               </button>
@@ -380,7 +380,7 @@ export function RosterScanner({
               <button
                 type="button"
                 onClick={() => switchSource("link")}
-                className="mt-4 text-sm font-semibold text-accent-ink"
+                className="mt-1 px-2 py-3 text-sm font-semibold text-accent-ink"
               >
                 🔗 Paste a link instead
               </button>
@@ -506,7 +506,7 @@ export function RosterScanner({
                   type="button"
                   onClick={() => removeRow(it.id)}
                   aria-label={`Remove row ${index + 1}`}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg text-muted active:bg-surface-muted"
+                  className="hit relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg text-muted active:bg-surface-muted"
                 >
                   ✕
                 </button>
@@ -704,7 +704,7 @@ function ApplyToAll({
 function Header({ eventId, eventName, source }: { eventId: string; eventName: string; source: RosterSource }) {
   return (
     <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-      <Link href={eventPath(eventId)} className="truncate text-accent-ink">
+      <Link href={eventPath(eventId)} className="-my-2.5 truncate py-2.5 text-accent-ink">
         ‹ {eventName}
       </Link>
       <h1 className="text-lg font-semibold">{source === "link" ? "Roster from link" : "Scan roster"}</h1>

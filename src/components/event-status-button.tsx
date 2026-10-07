@@ -13,7 +13,7 @@ export function EventStatusButton({ eventId, status }: { eventId: string; status
       type="button"
       disabled={pending}
       onClick={() => startTransition(() => setEventStatus(eventId, closing ? "closed" : "active"))}
-      className="rounded-full bg-surface-muted px-4 py-1.5 text-sm font-semibold disabled:opacity-60"
+      className="hit relative rounded-full bg-surface-muted px-4 py-1.5 text-sm font-semibold disabled:opacity-60"
     >
       {pending ? "Saving…" : closing ? "Close event" : "Reopen event"}
     </button>

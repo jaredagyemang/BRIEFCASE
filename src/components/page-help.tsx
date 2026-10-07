@@ -75,7 +75,9 @@ export function PageHelp({ tour, className = "" }: { tour: TourKey; className?: 
         type="button"
         onClick={() => setOpen(true)}
         aria-label={`Help: ${help.title}`}
-        className={`pointer-events-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-case text-accent shadow-sm ring-1 ring-accent/40 ${className}`}
+        className={`hit pointer-events-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-case text-accent shadow-sm ring-1 ring-accent/40 ${
+          className.includes("absolute") ? "" : "relative"
+        } ${className}`}
         data-help-button
       >
         <HelpIcon className="h-6 w-6" />
@@ -145,6 +147,19 @@ function Spotlight({ steps, onDone }: { steps: TourStep[]; onDone: () => void })
     };
   }, [step.target, last, onDone]);
 
+  // On a keyboard: Enter or → for Next, Escape to skip the rest.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" || ((e.key === "ArrowRight" || e.key === "Enter") && last)) onDone();
+      else if (e.key === "ArrowRight" || e.key === "Enter") setIndex(index + 1);
+      else return;
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [index, last, onDone]);
+
   if (typeof document === "undefined" || !rect) return null;
   const pad = 6;
   const box = {
@@ -155,7 +170,14 @@ function Spotlight({ steps, onDone }: { steps: TourStep[]; onDone: () => void })
   };
   // The explanation goes below the highlight if it fits, else above, else
   // at the bottom of the screen (for something taller than the screen).
+  // Sideways it sits under what it's about, kept on screen, so it stays next
+  // to the highlight on a wide screen too.
   const card = 170;
+  const cardWidth = Math.min(384, window.innerWidth - 32);
+  const cardLeft = Math.min(
+    Math.max(16, rect.left + rect.width / 2 - cardWidth / 2),
+    window.innerWidth - 16 - cardWidth,
+  );
   const below = box.top + box.height + 12;
   const position =
     below + card < window.innerHeight
@@ -173,8 +195,8 @@ function Spotlight({ steps, onDone }: { steps: TourStep[]; onDone: () => void })
         style={{ ...box, boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.62)" }}
       />
       <div
-        className="scheme-dark absolute inset-x-4 mx-auto max-w-sm rounded-2xl bg-background p-4 text-foreground shadow-2xl ring-1 ring-accent/50"
-        style={position}
+        className="scheme-dark absolute rounded-2xl bg-background p-4 text-foreground shadow-2xl ring-1 ring-accent/50"
+        style={{ ...position, left: cardLeft, width: cardWidth }}
         data-tour-step={step.target}
       >
         <p className="text-base leading-snug">{step.text}</p>
@@ -183,14 +205,14 @@ function Spotlight({ steps, onDone }: { steps: TourStep[]; onDone: () => void })
             {index + 1} of {steps.length}
           </span>
           {!last && (
-            <button type="button" onClick={onDone} className="ml-auto py-2 text-sm font-semibold text-muted">
+            <button type="button" onClick={onDone} className="ml-auto px-3 py-3 text-sm font-semibold text-muted">
               Skip
             </button>
           )}
           <button
             type="button"
             onClick={() => (last ? onDone() : setIndex(index + 1))}
-            className={`${last ? "ml-auto" : ""} rounded-xl bg-accent px-5 py-2 text-sm font-semibold text-accent-foreground`}
+            className={`${last ? "ml-auto" : ""} rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-accent-foreground`}
           >
             {last ? "Done" : "Next"}
           </button>

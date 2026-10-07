@@ -42,7 +42,7 @@ export function TermsGate({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="mx-auto w-full max-w-2xl px-4 pt-6 pb-3">
+      <div className="mx-auto w-full max-w-2xl px-4 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-3">
         {draft && (
           <p
             className="mb-3 inline-block rounded-full bg-yellow/20 px-3 py-1 text-xs font-semibold text-yellow-700 dark:text-yellow"
@@ -101,7 +101,7 @@ export function TermsGate({
         </form>
         {!readToEnd && <p className="mt-2 text-center text-xs text-muted">Scroll to the end to continue.</p>}
         <form action={signOut} className="mt-2 text-center">
-          <button type="submit" className="py-2 text-sm font-medium text-muted">
+          <button type="submit" className="px-2 py-3 text-sm font-medium text-muted">
             I don’t agree — sign out
           </button>
         </form>

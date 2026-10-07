@@ -96,7 +96,7 @@ export function SwipeTabs({
                 setActive(i);
                 scrollTo(i, "smooth");
               }}
-              className={`rounded-xl px-2 py-2 text-sm font-semibold transition ${
+              className={`rounded-xl px-2 py-2.5 text-sm font-semibold transition ${
                 selected ? "bg-foreground text-background shadow-sm" : "text-muted"
               }`}
             >

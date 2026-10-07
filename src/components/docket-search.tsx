@@ -160,7 +160,7 @@ export function DocketSearch({ connectedEmail, children }: { connectedEmail: str
     <>
       {/* A way back while searching, like "‹ Events" in Events. */}
       {query && (
-        <button type="button" onClick={closeSearch} className="mt-4 self-start text-accent-ink" data-search-back>
+        <button type="button" onClick={closeSearch} className="mt-1.5 self-start py-2.5 text-accent-ink" data-search-back>
           ‹ The Docket
         </button>
       )}
@@ -195,7 +195,7 @@ export function DocketSearch({ connectedEmail, children }: { connectedEmail: str
             type="button"
             onClick={closeSearch}
             aria-label="Clear search"
-            className="absolute top-1/2 right-2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-muted active:bg-surface-muted"
+            className="hit absolute top-1/2 right-2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-muted active:bg-surface-muted"
           >
             <svg
               aria-hidden
@@ -381,7 +381,7 @@ function ResultList({
                     labels.map((l) => (
                       <span
                         key={l}
-                        className="rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium"
+                        className="hit relative rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium"
                         data-label={l}
                       >
                         {l}

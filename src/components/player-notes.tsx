@@ -341,7 +341,7 @@ export function PlayerNotes({ eventId, playerId, notes }: { eventId: string; pla
                     onClick={startRecording}
                     disabled={uploading || pending !== null}
                     aria-label="Record voice note"
-                    className="flex items-center gap-2 rounded-full bg-surface-muted py-2 pr-4 pl-3 text-sm font-semibold transition active:scale-95 disabled:opacity-50"
+                    className="hit relative flex items-center gap-2 rounded-full bg-surface-muted py-2 pr-4 pl-3 text-sm font-semibold transition active:scale-95 disabled:opacity-50"
                   >
                     <span className="text-lg leading-none">🎙️</span>
                     Record
@@ -352,7 +352,7 @@ export function PlayerNotes({ eventId, playerId, notes }: { eventId: string; pla
                   onClick={() => scanInputRef.current?.click()}
                   disabled={scan !== null}
                   aria-label="Scan handwritten note"
-                  className="flex items-center gap-2 rounded-full bg-surface-muted py-2 pr-4 pl-3 text-sm font-semibold transition active:scale-95 disabled:opacity-50"
+                  className="hit relative flex items-center gap-2 rounded-full bg-surface-muted py-2 pr-4 pl-3 text-sm font-semibold transition active:scale-95 disabled:opacity-50"
                 >
                   <span className="text-lg leading-none">✍️</span>
                   Scan
@@ -374,7 +374,7 @@ export function PlayerNotes({ eventId, playerId, notes }: { eventId: string; pla
                 type="button"
                 onClick={saveText}
                 disabled={saving || !text.trim()}
-                className="rounded-full bg-accent px-5 py-2 text-sm font-semibold text-accent-foreground transition disabled:opacity-40"
+                className="hit relative rounded-full bg-accent px-5 py-2 text-sm font-semibold text-accent-foreground transition disabled:opacity-40"
               >
                 {saving ? "Saving…" : "Save note"}
               </button>
@@ -442,7 +442,7 @@ export function PlayerNotes({ eventId, playerId, notes }: { eventId: string; pla
                   type="button"
                   onClick={saveScan}
                   disabled={savingScan || !scan.text.trim()}
-                  className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-40"
+                  className="hit relative rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-40"
                 >
                   {savingScan ? "Saving…" : "Save scanned note"}
                 </button>
@@ -537,7 +537,7 @@ export function PlayerNotes({ eventId, playerId, notes }: { eventId: string; pla
                     type="button"
                     onClick={saveEdit}
                     disabled={savingEdit || !editing.draft.trim()}
-                    className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-40"
+                    className="hit relative rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-40"
                   >
                     {savingEdit ? "Saving…" : "Save"}
                   </button>
@@ -560,7 +560,7 @@ export function PlayerNotes({ eventId, playerId, notes }: { eventId: string; pla
                       <button
                         type="button"
                         onClick={() => transcribe(note.id)}
-                        className="shrink-0 rounded-full bg-surface-muted px-3.5 py-1.5 text-sm font-semibold"
+                        className="hit relative shrink-0 rounded-full bg-surface-muted px-3.5 py-1.5 text-sm font-semibold"
                       >
                         Retry
                       </button>
@@ -582,7 +582,7 @@ export function PlayerNotes({ eventId, playerId, notes }: { eventId: string; pla
                     <button
                       type="button"
                       onClick={() => startEditing(note)}
-                      className="-my-1 rounded-full px-2 py-1 font-semibold text-accent-ink"
+                      className="hit relative -my-1 rounded-full px-2 py-1 font-semibold text-accent-ink"
                     >
                       Edit
                     </button>

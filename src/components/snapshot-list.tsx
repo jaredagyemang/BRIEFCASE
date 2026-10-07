@@ -133,7 +133,7 @@ export function SnapshotCard({
               href={link.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-full bg-surface-muted px-3 py-1.5 text-sm font-semibold text-accent-ink"
+              className="hit relative rounded-full bg-surface-muted px-3 py-1.5 text-sm font-semibold text-accent-ink"
             >
               {PLATFORM_LABEL[link.platform]} ↗
             </a>

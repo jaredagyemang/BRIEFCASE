@@ -25,7 +25,7 @@ export function SortControl({ cookie, options, value }: { cookie: string; option
             const by = e.target.value as SortBy;
             choose({ by, dir: DEFAULT_DIR[by] });
           }}
-          className="rounded-full bg-surface-muted px-3 py-1.5 font-semibold text-foreground outline-none focus:ring-4 focus:ring-accent/15"
+          className="hit relative rounded-full bg-surface-muted px-3 py-1.5 font-semibold text-foreground outline-none focus:ring-4 focus:ring-accent/15"
         >
           {options.map((o) => (
             <option key={o} value={o}>
@@ -38,7 +38,7 @@ export function SortControl({ cookie, options, value }: { cookie: string; option
         type="button"
         onClick={() => choose({ by: value.by, dir: value.dir === "desc" ? "asc" : "desc" })}
         aria-label={`Order: ${dirLabel(value.by, value.dir)}. Tap to reverse.`}
-        className="flex items-center gap-1 rounded-full bg-surface-muted px-3 py-1.5 font-semibold"
+        className="hit relative flex items-center gap-1 rounded-full bg-surface-muted px-3 py-1.5 font-semibold"
       >
         <span aria-hidden>{value.dir === "desc" ? "↓" : "↑"}</span>
         {dirLabel(value.by, value.dir)}
