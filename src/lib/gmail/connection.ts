@@ -73,7 +73,9 @@ export async function saveConnection(tokens: {
     scopes: tokens.scopes,
     connected_at: new Date().toISOString(),
   });
-  if (error) throw new Error(`Couldn't save the email connection: ${error.message}`);
+  if (error) {
+    throw new Error(`Couldn't save the email connection (database${error.code ? ` ${error.code}` : ""}): ${error.message}`);
+  }
 }
 
 // Deletes the connection. For Gmail, also cancels the app's access at Google
