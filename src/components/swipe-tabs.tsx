@@ -11,11 +11,14 @@ export function SwipeTabs({
   tabs,
   initialTab,
   label,
+  tourId,
   children,
 }: {
   tabs: Tab[];
   initialTab?: string;
   label: string;
+  // Marks the tab bar for a page tour (data-tour).
+  tourId?: string;
   children: React.ReactNode;
 }) {
   const panes = Children.toArray(children);
@@ -72,7 +75,12 @@ export function SwipeTabs({
 
   return (
     <div>
-      <div role="tablist" aria-label={label} className="grid auto-cols-fr grid-flow-col gap-1 rounded-2xl bg-surface-muted p-1">
+      <div
+        role="tablist"
+        aria-label={label}
+        data-tour={tourId}
+        className="grid auto-cols-fr grid-flow-col gap-1 rounded-2xl bg-surface-muted p-1"
+      >
         {tabs.map((tab, i) => {
           const selected = i === active;
           return (
