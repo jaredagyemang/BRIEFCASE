@@ -1,14 +1,18 @@
 import { timingSafeEqual } from "node:crypto";
-import { NextResponse, type NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import { saveConnection } from "@/lib/gmail/connection";
 import { GMAIL_READONLY, STATE_COOKIE, emailFromIdToken, exchangeCode, revokeToken } from "@/lib/gmail/google";
+import { handoffPage, isSignedIn, resultRedirect } from "@/lib/mail/connect-window";
 
 // Google sends the coach back here after the consent screen. The result is
-// reported on The Docket via ?gmail=…
+// reported on The Docket via ?gmail=… (or, from the installed app's sign-in
+// window, passed back to the app).
 export async function GET(request: NextRequest) {
   const { origin, searchParams } = request.nextUrl;
+  // Back somewhere without the coach's sign-in (see handoffPage).
+  if (!(await isSignedIn())) return handoffPage("gmail");
   const back = (result: string) => {
-    const response = NextResponse.redirect(new URL(`/docket?gmail=${result}`, origin));
+    const response = resultRedirect(request, "gmail", result);
     response.cookies.delete({ name: STATE_COOKIE, path: "/api/auth/gmail" });
     return response;
   };

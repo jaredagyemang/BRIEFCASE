@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { BrandLogo } from "@/components/brand-logo";
+import { ConnectReturn } from "@/components/connect-mail-link";
 import { MODES, modeIndexFor } from "@/lib/modes";
 import { finishModeSlide, startModeSlide } from "@/lib/mode-slide";
 
@@ -93,7 +94,7 @@ export function AppNav() {
   }, [pathname]);
 
   // Signed-out screens have no header or mode switcher.
-  if (["/login", "/forgot-password", "/reset-password", "/welcome"].some((p) => pathname.startsWith(p))) return null;
+  if (["/login", "/forgot-password", "/reset-password", "/welcome", "/connected"].some((p) => pathname.startsWith(p))) return null;
 
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     suppressClick.current = false;
@@ -139,6 +140,8 @@ export function AppNav() {
 
   return (
     <>
+      {/* Results from Connect Gmail / Outlook in the installed iPhone/iPad app */}
+      <ConnectReturn />
       {/* Clear of the status bar and the notch/rounded corners when the app
           runs full screen (added to the home screen) or in landscape. */}
       <header className="z-20 flex-none border-b border-border bg-background pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)]">

@@ -47,7 +47,12 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname === "/api/auth/outlook/callback" && request.nextUrl.searchParams.has("admin_consent");
   if (adminConsent) return response;
 
-  if (!signedIn && !onLogin && !onPasswordReset) {
+  // Connect Gmail / Outlook answer signed-out visits themselves, with how to
+  // finish in the app (see lib/mail/connect-window.ts), rather than a sign-in
+  // page in the wrong place.
+  const onMailConnect = /^\/api\/auth\/(gmail|outlook)\/(start|callback)$/.test(request.nextUrl.pathname);
+
+  if (!signedIn && !onLogin && !onPasswordReset && !onMailConnect) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.search = "";

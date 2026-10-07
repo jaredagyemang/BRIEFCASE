@@ -1,11 +1,13 @@
 import { randomBytes } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { OUTLOOK_ERROR_COOKIE, OUTLOOK_STATE_COOKIE, errorDetail, outlookAuthorizationUrl } from "@/lib/gmail/outlook";
+import { handoffPage, isSignedIn, rememberWindow } from "@/lib/mail/connect-window";
 
 // "Connect Outlook": sends the coach to Microsoft's sign-in and consent
 // screen. As with Gmail, a one-time random value is kept in a private cookie
-// and checked when Microsoft sends them back.
+// and checked when Microsoft sends them back. Signed out: see handoffPage.
 export async function GET(request: NextRequest) {
+  if (!(await isSignedIn())) return handoffPage("outlook");
   const origin = request.nextUrl.origin;
   const state = randomBytes(32).toString("base64url");
   let url: string;
@@ -32,5 +34,6 @@ export async function GET(request: NextRequest) {
     path: "/api/auth/outlook",
     maxAge: 10 * 60,
   });
+  rememberWindow(request, response, "outlook");
   return response;
 }

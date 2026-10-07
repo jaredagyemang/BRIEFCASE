@@ -8,6 +8,7 @@ import { getConnectionSummary } from "@/lib/gmail/connection";
 import { createClient } from "@/lib/supabase/server";
 import { seenTours } from "@/lib/tours";
 import { OUTLOOK_ERROR_COOKIE, adminConsentUrl } from "@/lib/gmail/outlook";
+import { ConnectMailLink } from "@/components/connect-mail-link";
 
 type Message = { tone: "good" | "bad"; text: string };
 
@@ -119,18 +120,18 @@ function ConnectCard() {
       </p>
       {/* Plain links, not <Link>: these leave the app for Google's or Microsoft's sign-in. */}
       <div className="mt-6 w-full max-w-xs space-y-3" data-tour="docket-connect">
-        <a
+        <ConnectMailLink
           href="/api/auth/gmail/start"
           className="block w-full rounded-2xl bg-accent py-3.5 font-semibold text-accent-foreground"
         >
           Connect Gmail
-        </a>
-        <a
+        </ConnectMailLink>
+        <ConnectMailLink
           href="/api/auth/outlook/start"
           className="block w-full rounded-2xl bg-accent py-3.5 font-semibold text-accent-foreground"
         >
           Connect Outlook
-        </a>
+        </ConnectMailLink>
       </div>
       <p className="mt-3 max-w-xs text-xs text-muted">
         One at a time. Briefcase reads emails with film links; it only sends a reply or deletes an email when you tap

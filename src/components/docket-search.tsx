@@ -11,6 +11,7 @@ import {
   type GmailSearchResult,
   type SearchResult,
 } from "@/lib/gmail/docket-types";
+import { ConnectMailLink } from "@/components/connect-mail-link";
 
 // The Docket's search: players' names (and senders and subjects) across every
 // Info card Briefcase has read for this coach, including ones that left the
@@ -286,12 +287,12 @@ function GmailSection({
         <p className="mt-1 text-sm text-muted">
           {mail.company} stopped accepting this connection. Connect again to search {mail.name}.
         </p>
-        <a
+        <ConnectMailLink
           href={mail.connectPath}
           className="mt-4 inline-block rounded-2xl bg-accent px-6 py-3 font-semibold text-accent-foreground"
         >
           Reconnect {mail.name}
-        </a>
+        </ConnectMailLink>
       </div>
     );
   }

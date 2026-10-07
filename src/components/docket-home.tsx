@@ -10,6 +10,7 @@ import { saveCheckSpam, useCheckSpam } from "@/components/docket-settings";
 import { StaffActivity } from "@/components/staff-activity";
 import { useDocket } from "@/components/use-docket";
 import { DEFAULT_RANGE, RANGES, inRange, rangeFor, type RangeId } from "@/lib/gmail/docket-types";
+import { ConnectMailLink } from "@/components/connect-mail-link";
 
 // The chosen time range, remembered on this device (read after hydration;
 // the server renders the default).
@@ -96,12 +97,12 @@ export function DocketHome({
             : result.message}
         </p>
         {expired ? (
-          <a
+          <ConnectMailLink
             href={mail.connectPath}
             className="mt-4 inline-block rounded-2xl bg-accent px-6 py-3 font-semibold text-accent-foreground"
           >
             Reconnect {mail.name}
-          </a>
+          </ConnectMailLink>
         ) : (
           <button
             type="button"
