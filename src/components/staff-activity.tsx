@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { ActivityLine } from "@/components/activity-line";
 import type { ActivityEntry, ActivityPage } from "@/lib/gmail/docket-types";
 
-// Team activity on The Docket's home, for the time range picked there:
+// Staff activity on The Docket's home, for the time range picked there:
 // Shortlist and Share to team (added or removed) and replies that turn a
 // player down, by any coach, newest first.
 
@@ -34,11 +34,11 @@ async function fetchPage(hours: number, before?: string): Promise<ActivityPage> 
     if (!res.ok) throw new Error(String(res.status));
     return (await res.json()) as ActivityPage;
   } catch {
-    return { status: "error", message: "Couldn’t load team activity. Check your connection." };
+    return { status: "error", message: "Couldn’t load staff activity. Check your connection." };
   }
 }
 
-export function TeamActivity({
+export function StaffActivity({
   connectedEmail,
   hours,
   phrase,
@@ -85,9 +85,9 @@ export function TeamActivity({
   const error = failed?.hours === hours ? failed.message : null;
 
   return (
-    <section className="mt-8" aria-labelledby="team-activity" data-team-activity>
-      <h2 id="team-activity" className="mb-2 px-1 text-sm font-semibold tracking-wide text-muted uppercase">
-        Team activity
+    <section className="mt-8" aria-labelledby="staff-activity" data-staff-activity>
+      <h2 id="staff-activity" className="mb-2 px-1 text-sm font-semibold tracking-wide text-muted uppercase">
+        Staff activity
       </h2>
       {!list ? (
         error ? (
@@ -106,7 +106,7 @@ export function TeamActivity({
         )
       ) : list.entries.length === 0 ? (
         <p className="rounded-3xl bg-surface px-6 py-6 text-center text-sm text-muted" data-activity-empty>
-          No team activity in {phrase}.
+          No staff activity in {phrase}.
         </p>
       ) : (
         <>

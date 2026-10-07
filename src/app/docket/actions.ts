@@ -44,14 +44,17 @@ export async function sendReplyAction(messageId: string, template: ReplyTemplate
   return sendReply(messageId, template, body);
 }
 
-export async function shortlistAction(messageId: string, shortlisted: boolean) {
-  await setShortlisted(messageId, shortlisted);
-  revalidatePath("/docket/shortlist");
+// force: add anyway when a player with the same name is already on the list.
+export async function shortlistAction(messageId: string, shortlisted: boolean, force?: boolean) {
+  const result = await setShortlisted(messageId, shortlisted, force === true);
+  if (result.status === "done") revalidatePath("/docket/shortlist");
+  return result;
 }
 
-export async function shareAction(messageId: string, shared: boolean, note?: string | null) {
-  await setShared(messageId, shared, typeof note === "string" ? note : null);
-  revalidatePath("/docket/shared");
+export async function shareAction(messageId: string, shared: boolean, note?: string | null, force?: boolean) {
+  const result = await setShared(messageId, shared, typeof note === "string" ? note : null, force === true);
+  if (result.status === "done") revalidatePath("/docket/shared");
+  return result;
 }
 
 const LIST_PATH: Record<SnapshotList, string> = { shortlist: "/docket/shortlist", shared: "/docket/shared" };

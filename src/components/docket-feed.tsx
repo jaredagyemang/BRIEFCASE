@@ -24,11 +24,13 @@ import {
   type CardStatus,
   type DocketEmail,
   type InfoField,
+  type ListResult,
   type RangeId,
   type ReplyTemplate,
 } from "@/lib/gmail/docket-types";
 import { PLATFORM_LABEL, googleDocPreview, uniqueMedia, youtubeVideo, type FoundLink } from "@/lib/gmail/links";
 import { TEMPLATE_LABEL, buildReply } from "@/lib/gmail/templates";
+import { timeAgo } from "@/lib/time";
 
 // The Docket's review feed, for the time range chosen on its home screen:
 // one row per player (per email), newest first. Swipe up/down to move between
@@ -289,7 +291,7 @@ function Feed({
     });
   }
 
-  const { toggleShortlist, share, unshare } = useCardActions(updateEmail, setToast);
+  const { toggleShortlist, share, unshare, listNotice } = useCardActions(updateEmail, setToast);
 
   function deleted(email: DocketEmail) {
     removeEmail(email.id);
@@ -411,6 +413,7 @@ function Feed({
           )}
         </div>
       )}
+      {listNotice}
     </FeedShell>
   );
 }
@@ -498,7 +501,7 @@ export function SingleCard({
     setEmail((e) => ({ ...e, ...patch }));
     clearDocketCache();
   }
-  const { toggleShortlist, share, unshare } = useCardActions(updateEmail, setToast);
+  const { toggleShortlist, share, unshare, listNotice } = useCardActions(updateEmail, setToast);
 
   // Found in Gmail but not read yet: read it now (state is only set once
   // the read finishes, so this can start from an effect).
@@ -625,6 +628,7 @@ export function SingleCard({
           )}
         </div>
       )}
+      {listNotice}
     </FeedShell>
   );
 }
@@ -635,12 +639,37 @@ function useCardActions(
   updateEmail: (id: string, patch: Partial<DocketEmail>) => void,
   setToast: (toast: Toast | null) => void,
 ) {
+  // Already on the list: who added it, and (for the same player from another
+  // email) the choice to add this one anyway.
+  const [already, setAlready] = useState<{
+    list: "shortlist" | "shared";
+    result: Extract<ListResult, { status: "already" }>;
+    addAnyway: () => void;
+  } | null>(null);
+
+  function addToShortlist(email: DocketEmail, force: boolean) {
+    updateEmail(email.id, { shortlisted: true });
+    shortlistAction(email.id, true, force)
+      .then((result) => {
+        if (result.status === "done") return setToast({ message: "Added to the Shortlist" });
+        // This email is on it already (the button was out of date): show it
+        // as shortlisted. Another email's: not this one, unless added anyway.
+        updateEmail(email.id, { shortlisted: result.match === "same" });
+        setToast(null);
+        setAlready({ list: "shortlist", result, addAnyway: () => addToShortlist(email, true) });
+      })
+      .catch(() => {
+        updateEmail(email.id, { shortlisted: false });
+        setToast({ message: "Couldn’t update the Shortlist. Try again." });
+      });
+  }
+
   function toggleShortlist(email: DocketEmail) {
-    const next = !email.shortlisted;
-    updateEmail(email.id, { shortlisted: next });
-    setToast({ message: next ? "Added to the Shortlist" : "Removed from the Shortlist" });
-    shortlistAction(email.id, next).catch(() => {
-      updateEmail(email.id, { shortlisted: !next });
+    if (!email.shortlisted) return addToShortlist(email, false);
+    updateEmail(email.id, { shortlisted: false });
+    setToast({ message: "Removed from the Shortlist" });
+    shortlistAction(email.id, false).catch(() => {
+      updateEmail(email.id, { shortlisted: true });
       setToast({ message: "Couldn’t update the Shortlist. Try again." });
     });
   }
@@ -648,29 +677,45 @@ function useCardActions(
   // Share / un-share, one at a time per email, so a quick Share → Undo can't
   // land in the wrong order.
   const shareQueue = useRef(new Map<string, Promise<unknown>>());
-  function setSharedOnServer(email: DocketEmail, shared: boolean, failMessage: string, note?: string) {
+  function setSharedOnServer(
+    email: DocketEmail,
+    shared: boolean,
+    failMessage: string,
+    note?: string,
+    force = false,
+  ): Promise<ListResult | null> {
     const previous = shareQueue.current.get(email.id) ?? Promise.resolve();
     const next = previous
       .catch(() => {})
-      .then(() => shareAction(email.id, shared, note))
+      .then(() => shareAction(email.id, shared, note, force))
       .catch(() => {
         updateEmail(email.id, { shared: !shared });
         setToast({ message: failMessage });
+        return null;
       });
     shareQueue.current.set(email.id, next);
+    return next;
   }
 
-  function share(email: DocketEmail, note: string) {
+  function share(email: DocketEmail, note: string, force = false) {
     updateEmail(email.id, { shared: true });
-    setToast({
-      message: "Shared with team",
-      undo: () => {
+    setSharedOnServer(email, true, "Couldn’t share it. Try again.", note, force).then((result) => {
+      if (!result) return;
+      if (result.status === "already") {
+        updateEmail(email.id, { shared: result.match === "same" });
         setToast(null);
-        updateEmail(email.id, { shared: false });
-        setSharedOnServer(email, false, "Couldn’t undo. Try again.");
-      },
+        setAlready({ list: "shared", result, addAnyway: () => share(email, note, true) });
+        return;
+      }
+      setToast({
+        message: "Shared with team",
+        undo: () => {
+          setToast(null);
+          updateEmail(email.id, { shared: false });
+          setSharedOnServer(email, false, "Couldn’t undo. Try again.");
+        },
+      });
     });
-    setSharedOnServer(email, true, "Couldn’t share it. Try again.", note);
   }
 
   function unshare(email: DocketEmail) {
@@ -679,7 +724,63 @@ function useCardActions(
     setSharedOnServer(email, false, "Couldn’t update Shared with team. Try again.");
   }
 
-  return { toggleShortlist, share, unshare };
+  const listNotice = already && (
+    <AlreadyOnList
+      list={already.list}
+      result={already.result}
+      onAddAnyway={() => {
+        already.addAnyway();
+        setAlready(null);
+      }}
+      onClose={() => setAlready(null)}
+    />
+  );
+
+  return { toggleShortlist, share, unshare, listNotice };
+}
+
+// "Already on the Shortlist, added by Jane": instead of adding it twice.
+function AlreadyOnList({
+  list,
+  result,
+  onAddAnyway,
+  onClose,
+}: {
+  list: "shortlist" | "shared";
+  result: Extract<ListResult, { status: "already" }>;
+  onAddAnyway: () => void;
+  onClose: () => void;
+}) {
+  const by = result.by === "you" ? "you" : result.by;
+  const where = list === "shortlist" ? `on the Shortlist, added by ${by}` : `shared with the team, by ${by}`;
+  const title = result.match === "same" ? `Already ${where}` : `${result.player ?? "This player"} is already ${where}`;
+  return (
+    <Sheet onClose={onClose}>
+      <div data-already-on-list={result.match}>
+        <SheetTitle
+          title={title}
+          subtitle={
+            result.match === "same"
+              ? timeAgo(result.at)
+              : `${timeAgo(result.at)}, from a different email. If this is a different player, or you want this film on the list too, add it anyway.`
+          }
+        />
+        {result.note && (
+          <blockquote className="mx-1 mb-3 rounded-2xl border-l-4 border-accent bg-surface-muted px-3 py-2 text-sm break-words whitespace-pre-wrap">
+            {result.note}
+          </blockquote>
+        )}
+      </div>
+      <Link
+        href={list === "shortlist" ? "/docket/shortlist" : "/docket/shared"}
+        className="block w-full rounded-2xl bg-accent py-3.5 text-center font-semibold text-accent-foreground"
+      >
+        {list === "shortlist" ? "View Shortlist" : "View Shared with team"}
+      </Link>
+      {result.match === "name" && <SheetButton onClick={onAddAnyway}>Add anyway</SheetButton>}
+      <SheetButton onClick={onClose}>Close</SheetButton>
+    </Sheet>
+  );
 }
 
 // One player: their Info card, then their videos, side by side.
