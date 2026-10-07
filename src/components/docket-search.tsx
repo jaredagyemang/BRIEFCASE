@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMail } from "@/components/mail-provider";
 import {
   cleanSearch,
@@ -145,13 +145,26 @@ export function DocketSearch({ connectedEmail, children }: { connectedEmail: str
     });
   }
 
+  // Clears the search and closes it (and the keyboard), back to The Docket's home.
+  const input = useRef<HTMLInputElement>(null);
+  function closeSearch() {
+    setQuery("");
+    input.current?.blur();
+  }
+
   const localResults = searching && local?.term === term ? local.results : undefined;
   const gmailNow = searching ? (gmail[term] ?? null) : null;
   const localIds = new Set((localResults ?? []).map((r) => r.id));
 
   return (
     <>
-      <div className="relative mt-6">
+      {/* A way back while searching, like "‹ Events" in Events. */}
+      {query && (
+        <button type="button" onClick={closeSearch} className="mt-4 self-start text-accent-ink" data-search-back>
+          ‹ The Docket
+        </button>
+      )}
+      <div className={`relative ${query ? "mt-2" : "mt-6"}`}>
         <svg
           aria-hidden
           viewBox="0 0 20 20"
@@ -165,16 +178,38 @@ export function DocketSearch({ connectedEmail, children }: { connectedEmail: str
           <path d="m13 13 4 4" />
         </svg>
         <input
+          ref={input}
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => e.key === "Escape" && closeSearch()}
           placeholder="Search players by name"
           aria-label="Search players by name"
           autoComplete="off"
           enterKeyHint="search"
           maxLength={80}
-          className="w-full rounded-2xl border border-border bg-surface py-3.5 pr-4 pl-12 text-base outline-none focus:border-accent"
+          className="w-full rounded-2xl border border-border bg-surface py-3.5 pr-12 pl-12 text-base outline-none focus:border-accent [&::-webkit-search-cancel-button]:appearance-none"
         />
+        {query && (
+          <button
+            type="button"
+            onClick={closeSearch}
+            aria-label="Clear search"
+            className="absolute top-1/2 right-2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-muted active:bg-surface-muted"
+          >
+            <svg
+              aria-hidden
+              viewBox="0 0 20 20"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+            >
+              <path d="m5 5 10 10M15 5 5 15" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {!searching ? (

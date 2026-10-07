@@ -4,6 +4,7 @@ import { DocketHome } from "@/components/docket-home";
 import { MailProviderScope } from "@/components/mail-provider";
 import { PageScroller } from "@/components/page-scroller";
 import { getConnectionSummary } from "@/lib/gmail/connection";
+import { createClient } from "@/lib/supabase/server";
 import { OUTLOOK_ERROR_COOKIE, adminConsentUrl } from "@/lib/gmail/outlook";
 
 type Message = { tone: "good" | "bad"; text: string };
@@ -52,6 +53,7 @@ export default async function DocketPage({ searchParams }: PageProps<"/docket">)
         ? OUTLOOK_MESSAGES[outlookResult]
         : undefined;
   const connection = await getConnectionSummary();
+  const counts = connection ? await listCounts() : undefined;
   // Exactly why connecting Outlook didn't work (from Microsoft or the database).
   const reason =
     outlookResult && outlookResult !== "connected" ? (await cookies()).get(OUTLOOK_ERROR_COOKIE)?.value : undefined;
@@ -63,6 +65,7 @@ export default async function DocketPage({ searchParams }: PageProps<"/docket">)
           connectedEmail={connection.google_email}
           notice={message ? { ...message, reason } : undefined}
           extra={outlookResult === "admin-approval" ? <SchoolApproval reason={reason} /> : undefined}
+          counts={counts}
         />
       </MailProviderScope>
     );
@@ -169,4 +172,15 @@ function DocketSlip() {
       </div>
     </div>
   );
+}
+
+// How many players are on the Shortlist and Shared with team (seen by all
+// staff), for the buttons on The Docket's home.
+async function listCounts() {
+  const supabase = await createClient();
+  const [shortlist, shared] = await Promise.all([
+    supabase.from("shortlist").select("id", { count: "exact", head: true }),
+    supabase.from("team_shares").select("id", { count: "exact", head: true }),
+  ]);
+  return { shortlist: shortlist.count ?? 0, shared: shared.count ?? 0 };
 }

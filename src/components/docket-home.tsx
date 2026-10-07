@@ -48,8 +48,11 @@ export function DocketHome({
   connectedEmail,
   notice,
   extra,
+  counts,
 }: {
   connectedEmail: string;
+  // How many players are on the Shortlist and Shared with team (all staff).
+  counts?: { shortlist: number; shared: number };
   notice?: { tone: "good" | "bad"; text: string; reason?: string };
   extra?: React.ReactNode;
 }) {
@@ -59,7 +62,10 @@ export function DocketHome({
   // Not when coming back to this screen later (e.g. from a card), after the
   // address was tidied up below.
   const [showNotice, setShowNotice] = useState(
-    () => Boolean(notice) && (typeof window === "undefined" || ["gmail", "outlook"].some((k) => new URLSearchParams(window.location.search).has(k))),
+    () =>
+      Boolean(notice) &&
+      (typeof window === "undefined" ||
+        ["gmail", "outlook"].some((k) => new URLSearchParams(window.location.search).has(k))),
   );
   // The message came from "?gmail=…" or "?outlook=…"; drop that from the address so going
   // back here later doesn't show it again (keeping any search in it).
@@ -139,7 +145,11 @@ export function DocketHome({
         {showNotice &&
           notice?.tone === "bad" &&
           (extra ?? (
-            <div role="status" className="mt-4 rounded-2xl bg-red/10 px-4 py-3 text-sm font-medium text-red" data-connect-error>
+            <div
+              role="status"
+              className="mt-4 rounded-2xl bg-red/10 px-4 py-3 text-sm font-medium text-red"
+              data-connect-error
+            >
               <p>{notice.text}</p>
               {notice.reason && (
                 <p className="mt-2 font-mono text-xs break-words whitespace-pre-wrap" data-connect-reason>
@@ -149,7 +159,11 @@ export function DocketHome({
               <p className="mt-2 text-xs font-normal text-muted">
                 You’re still connected to {mail.name} ({connectedEmail}).
               </p>
-              <button type="button" onClick={() => setShowNotice(false)} className="mt-2 text-xs font-semibold underline">
+              <button
+                type="button"
+                onClick={() => setShowNotice(false)}
+                className="mt-2 text-xs font-semibold underline"
+              >
                 Dismiss
               </button>
             </div>
@@ -223,12 +237,8 @@ export function DocketHome({
                 Start Reviewing
               </button>
             )}
-            <Link
-              href="/docket/shortlist"
-              className="block w-full rounded-2xl bg-surface py-4 text-center text-lg font-semibold"
-            >
-              View Shortlist
-            </Link>
+            <ListLink href="/docket/shortlist" label="View Shortlist" count={counts?.shortlist} />
+            <ListLink href="/docket/shared" label="View Shared with team" count={counts?.shared} />
           </div>
 
           <StaffActivity connectedEmail={connectedEmail} hours={range.hours} phrase={range.phrase} />
@@ -265,5 +275,26 @@ function SpamToggle() {
         />
       </button>
     </div>
+  );
+}
+
+// "View Shortlist" / "View Shared with team", with how many are on each.
+function ListLink({ href, label, count }: { href: string; label: string; count?: number }) {
+  return (
+    <Link
+      href={href}
+      className="relative flex w-full items-center justify-center rounded-2xl bg-surface py-4 text-lg font-semibold"
+    >
+      {label}
+      {count !== undefined && (
+        <span
+          className="absolute right-4 min-w-7 rounded-full bg-surface-muted px-2 py-0.5 text-center text-sm font-semibold tabular-nums text-muted"
+          aria-label={`${count} ${count === 1 ? "player" : "players"}`}
+          data-list-count
+        >
+          {count}
+        </span>
+      )}
+    </Link>
   );
 }
