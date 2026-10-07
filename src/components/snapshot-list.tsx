@@ -1,7 +1,8 @@
 import { RemoveFromListButton } from "@/components/remove-from-list-button";
 import type { SnapshotList } from "@/lib/gmail/docket";
 import type { DocketInfo, InfoField } from "@/lib/gmail/docket-types";
-import { PLATFORM_LABEL, type FoundLink } from "@/lib/gmail/links";
+import { OPEN_ON_YOUTUBE, YouTubeInline } from "@/components/youtube-player";
+import { PLATFORM_LABEL, uniqueMedia, type FoundLink } from "@/lib/gmail/links";
 import { createClient } from "@/lib/supabase/server";
 import { timeAgo } from "@/lib/time";
 
@@ -101,6 +102,7 @@ export function SnapshotCard({
   removable?: boolean;
 }) {
   const name = row.info.name?.value ?? "Name not in the email";
+  const youtube = uniqueMedia(row.links).filter((link) => link.platform === "youtube");
   return (
     <Tag className="rounded-3xl bg-surface p-4">
       <div className="flex items-start justify-between gap-3">
@@ -125,6 +127,14 @@ export function SnapshotCard({
         {row.email_date && ` · ${day(row.email_date)}`}
       </p>
       {row.subject && <p className="truncate text-sm text-muted">{row.subject}</p>}
+      {/* YouTube plays right here, in the same player as the feed. */}
+      {youtube.length > 0 && (
+        <div className="mt-3 space-y-3" data-snapshot-videos>
+          {youtube.map((link) => (
+            <YouTubeInline key={link.url} url={link.url} />
+          ))}
+        </div>
+      )}
       {row.links.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
           {row.links.map((link) => (
@@ -135,7 +145,7 @@ export function SnapshotCard({
               rel="noopener noreferrer"
               className="hit relative rounded-full bg-surface-muted px-3 py-1.5 text-sm font-semibold text-accent-ink"
             >
-              {PLATFORM_LABEL[link.platform]} ↗
+              {link.platform === "youtube" ? OPEN_ON_YOUTUBE : PLATFORM_LABEL[link.platform]} ↗
             </a>
           ))}
         </div>
