@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
       return back("failed");
     }
     await saveConnection({
+      provider: "google",
       googleEmail,
       refreshToken: tokens.refresh_token,
       accessToken: tokens.access_token,

@@ -2,28 +2,36 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { SingleCard } from "@/components/docket-feed";
 import { PageScroller } from "@/components/page-scroller";
+import { MailProviderScope } from "@/components/mail-provider";
+import { getConnectionSummary } from "@/lib/gmail/connection";
 import { loadDocketCard } from "@/lib/gmail/docket";
+import { mailLabels } from "@/lib/mail/labels";
 import { getCurrentUser } from "@/lib/staff";
 
 // One player's Info card and video(s) on their own, opened from The Docket's
 // search or staff activity. ?from=search or ?from=activity makes ‹ Back return
 // there as it was.
 export default async function DocketCardPage({ params, searchParams }: PageProps<"/docket/card/[id]">) {
-  const [{ id }, query] = await Promise.all([params, searchParams]);
-  const [result, user] = await Promise.all([loadDocketCard(id), getCurrentUser()]);
+  const [{ id: rawId }, query] = await Promise.all([params, searchParams]);
+  // Outlook's message ids contain "=", which arrives still encoded.
+  const id = safeDecode(rawId);
+  const [result, user, connection] = await Promise.all([loadDocketCard(id), getCurrentUser(), getConnectionSummary()]);
+  const mail = mailLabels(connection?.provider);
   if (result.status === "not_connected") redirect("/docket");
 
   if (result.status === "ok") {
     return (
-      <SingleCard
-        initial={result.email}
-        card={result.card}
-        inTrash={result.inTrash}
-        canSend={result.canSend}
-        canDelete={result.canDelete}
-        coachName={user?.name ?? "Coach"}
-        fromList={query.from === "search" || query.from === "activity"}
-      />
+      <MailProviderScope provider={connection?.provider ?? "google"}>
+        <SingleCard
+          initial={result.email}
+          card={result.card}
+          inTrash={result.inTrash}
+          canSend={result.canSend}
+          canDelete={result.canDelete}
+          coachName={user?.name ?? "Coach"}
+          fromList={query.from === "search" || query.from === "activity"}
+        />
+      </MailProviderScope>
     );
   }
 
@@ -31,12 +39,12 @@ export default async function DocketCardPage({ params, searchParams }: PageProps
     result.status === "not_found"
       ? {
           title: "That email is gone",
-          text: "It’s no longer in your Gmail (it may have been deleted for good).",
+          text: `It’s no longer in your ${mail.name} (it may have been deleted for good).`,
         }
       : result.status === "expired"
         ? {
-            title: "Gmail needs reconnecting",
-            text: "Google stopped accepting this connection (it expired or access was removed). Connect again to open this card.",
+            title: `${mail.name} needs reconnecting`,
+            text: `${mail.company} stopped accepting this connection (it expired or access was removed). Connect again to open this card.`,
           }
         : { title: "Couldn’t open this card", text: result.message };
 
@@ -50,13 +58,21 @@ export default async function DocketCardPage({ params, searchParams }: PageProps
         <p className="mt-1 text-sm text-muted">{message.text}</p>
         {result.status === "expired" && (
           <a
-            href="/api/auth/gmail/start"
+            href={mail.connectPath}
             className="mt-4 inline-block rounded-2xl bg-accent px-6 py-3 font-semibold text-accent-foreground"
           >
-            Reconnect Gmail
+            Reconnect {mail.name}
           </a>
         )}
       </div>
     </PageScroller>
   );
+}
+
+function safeDecode(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }

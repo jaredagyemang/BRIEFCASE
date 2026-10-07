@@ -1,9 +1,15 @@
+import { headers } from "next/headers";
+import { CopyButton } from "@/components/copy-button";
 import { DocketHome } from "@/components/docket-home";
+import { MailProviderScope } from "@/components/mail-provider";
 import { PageScroller } from "@/components/page-scroller";
 import { getConnectionSummary } from "@/lib/gmail/connection";
+import { adminConsentUrl } from "@/lib/gmail/outlook";
+
+type Message = { tone: "good" | "bad"; text: string };
 
 // Results of the Connect Gmail round trip, from ?gmail=…
-const MESSAGES: Record<string, { tone: "good" | "bad"; text: string }> = {
+const GMAIL_MESSAGES: Record<string, Message> = {
   connected: { tone: "good", text: "Gmail connected." },
   denied: { tone: "bad", text: "Gmail wasn’t connected: permission was declined on Google’s screen." },
   "missing-permission": {
@@ -14,16 +20,43 @@ const MESSAGES: Record<string, { tone: "good" | "bad"; text: string }> = {
   "not-configured": { tone: "bad", text: "Gmail isn’t set up on this server yet (missing Google credentials)." },
 };
 
+// Results of the Connect Outlook round trip, from ?outlook=…
+const OUTLOOK_MESSAGES: Record<string, Message> = {
+  connected: { tone: "good", text: "Outlook connected." },
+  denied: { tone: "bad", text: "Outlook wasn’t connected: permission was declined on Microsoft’s screen." },
+  "missing-permission": {
+    tone: "bad",
+    text: "Outlook wasn’t connected: Briefcase didn’t get permission to read your email. Connect again and accept.",
+  },
+  blocked: {
+    tone: "bad",
+    text: "Outlook wasn’t connected: your school’s security settings blocked the sign-in. Ask your IT department to allow Briefcase.",
+  },
+  failed: { tone: "bad", text: "Couldn’t connect Outlook. Please try again." },
+  "not-configured": { tone: "bad", text: "Outlook isn’t set up on this server yet (missing Microsoft credentials)." },
+};
+
 // Daily Mode: The Docket's home screen (time range, count, Start Reviewing,
-// View Shortlist), or a Connect Gmail card until Gmail is connected.
+// View Shortlist), or a Connect card (Gmail or Outlook) until one is connected.
 export default async function DocketPage({ searchParams }: PageProps<"/docket">) {
   const params = await searchParams;
-  const message = typeof params.gmail === "string" ? MESSAGES[params.gmail] : undefined;
+  const outlookResult = typeof params.outlook === "string" ? params.outlook : null;
+  const message =
+    typeof params.gmail === "string"
+      ? GMAIL_MESSAGES[params.gmail]
+      : outlookResult
+        ? OUTLOOK_MESSAGES[outlookResult]
+        : undefined;
   const connection = await getConnectionSummary();
 
   if (connection) {
     return (
-      <DocketHome connectedEmail={connection.google_email} notice={message?.tone === "good" ? message.text : undefined} />
+      <MailProviderScope provider={connection.provider}>
+        <DocketHome
+          connectedEmail={connection.google_email}
+          notice={message?.tone === "good" ? message.text : undefined}
+        />
+      </MailProviderScope>
     );
   }
 
@@ -42,31 +75,65 @@ export default async function DocketPage({ searchParams }: PageProps<"/docket">)
           {message.text}
         </p>
       )}
+      {outlookResult === "admin-approval" && <SchoolApproval />}
 
-      <ConnectGmailCard />
+      <ConnectCard />
     </PageScroller>
   );
 }
 
-function ConnectGmailCard() {
+function ConnectCard() {
   return (
     <div className="mt-6 flex flex-col items-center rounded-3xl bg-surface px-6 py-10 text-center">
       <DocketSlip />
       <p className="mt-6 text-lg font-semibold">Bring in film from your inbox</p>
       <p className="mt-1 max-w-xs text-muted">
-        Connect Gmail and The Docket collects YouTube, Hudl and Veo links, plus Google Docs, from the last 30 days of
-        email.
+        Connect your email and The Docket collects YouTube, Hudl and Veo links, plus Google Docs, from the last 30 days.
       </p>
-      {/* A plain link, not <Link>: this leaves the app for Google's sign-in. */}
+      {/* Plain links, not <Link>: these leave the app for Google's or Microsoft's sign-in. */}
       <a
         href="/api/auth/gmail/start"
         className="mt-6 w-full max-w-xs rounded-2xl bg-accent py-3.5 font-semibold text-accent-foreground"
       >
         Connect Gmail
       </a>
+      <a
+        href="/api/auth/outlook/start"
+        className="mt-3 w-full max-w-xs rounded-2xl bg-accent py-3.5 font-semibold text-accent-foreground"
+      >
+        Connect Outlook
+      </a>
       <p className="mt-3 max-w-xs text-xs text-muted">
-        Read-only: Briefcase can’t send, delete or change anything in your email. Disconnect anytime.
+        One at a time. Briefcase reads emails with film links; it only sends a reply or deletes an email when you tap
+        to. Disconnect anytime.
       </p>
+    </div>
+  );
+}
+
+// The coach's school only lets administrators approve apps that read mail:
+// a note to forward to IT, with the link that approves Briefcase for the school.
+async function SchoolApproval() {
+  const h = await headers();
+  const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("x-forwarded-host") ?? h.get("host")}`;
+  let link: string;
+  try {
+    link = adminConsentUrl(origin);
+  } catch {
+    return null;
+  }
+  const note = `Hi, I'd like to use Briefcase (a recruiting app) with my school Outlook account. Microsoft says an administrator needs to approve it first. You can review and approve it here: ${link}`;
+  return (
+    <div className="mt-4 rounded-3xl bg-surface p-5" data-school-approval>
+      <p className="font-semibold">Your school needs to approve Briefcase</p>
+      <p className="mt-1 text-sm text-muted">
+        Your school’s Microsoft settings only let an administrator approve apps that read email. Send this note to your
+        IT department; once they approve, tap Connect Outlook again.
+      </p>
+      <p className="mt-3 rounded-2xl bg-surface-muted px-3 py-2 text-sm break-words select-all" data-it-note>
+        {note}
+      </p>
+      <CopyButton text={note} label="Copy note for IT" />
     </div>
   );
 }

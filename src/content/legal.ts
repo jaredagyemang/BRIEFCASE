@@ -8,7 +8,7 @@
 // Formatting: a blank line starts a new paragraph, "## " starts a heading and
 // "- " starts a bullet point.
 
-export const LEGAL_VERSION = "2026-09-29-draft-2";
+export const LEGAL_VERSION = "2026-10-07-draft-3";
 
 // Shows "Draft — under legal review" on the screen.
 export const LEGAL_DRAFT = true;
@@ -33,12 +33,13 @@ About players, the young athletes coaches evaluate:
 
 We want to be direct about this: much of the player information above concerns minors, athletes under the age of 18. We treat this information as sensitive and limit who can see it, as described below.
 
-Gmail data, if a coach connects their email:
+Email data, if a coach connects their email (Gmail, or Outlook / Microsoft 365):
 
-- Briefcase reads a connected coach's Gmail inbox, and their Spam folder if turned on, to find recruiting-related emails and the video links they contain.
+- Briefcase reads a connected coach's mailbox, and their Spam or Junk folder if turned on, to find recruiting-related emails and the video links they contain.
 - Briefcase does not store the contents of emails. It stores only the specific details described above that a coach's account extracts from an email.
-- Briefcase can send email replies on a coach's behalf, only when the coach taps to send one, from the coach's own Gmail account.
-- A coach can disconnect Gmail access at any time, which removes Briefcase's access to their inbox.
+- Briefcase can send email replies on a coach's behalf, only when the coach taps to send one, from the coach's own Gmail or Outlook account.
+- Briefcase can move an email to the coach's Trash (Gmail) or Deleted Items (Outlook), only when the coach taps Delete.
+- A coach can disconnect their email at any time, which deletes Briefcase's saved access to their mailbox. For Gmail, this also cancels Briefcase's access at Google; for Outlook, the coach can also remove Briefcase in their Microsoft account settings.
 
 ## Who can see this information
 
@@ -52,7 +53,7 @@ Information is kept as long as a coach's account or the relevant event exists in
 
 ## Your choices
 
-A coach can edit or delete notes and ratings they created, disconnect Gmail at any time, and request that their account and associated data be deleted by contacting us.
+A coach can edit or delete notes and ratings they created, disconnect their email at any time, and request that their account and associated data be deleted by contacting us.
 
 ## Children's information
 
@@ -86,9 +87,9 @@ You agree to handle information about prospective student-athletes, including mi
 
 Briefcase uses AI to read photos, handwritten notes and emails, and to extract information such as a player's GPA or position. AI can make mistakes. Briefcase flags information it isn't confident about, but you're responsible for verifying important details before relying on them or acting on them.
 
-## Gmail access
+## Email access
 
-If you connect your email, you're granting Briefcase permission to read your inbox for recruiting-related content and to send replies only when you tap to send them. You can revoke this access at any time from your Profile.
+If you connect your email (Gmail, or Outlook / Microsoft 365), you're granting Briefcase permission to read your mailbox for recruiting-related content, to send replies only when you tap to send them, and to move an email to Trash or Deleted Items only when you tap Delete. You can disconnect at any time from your Profile.
 
 ## No warranty
 

@@ -14,6 +14,8 @@ import {
 } from "@/app/docket/actions";
 import { PageScroller } from "@/components/page-scroller";
 import { Sheet, SheetButton, SheetTitle } from "@/components/sheet";
+import { useMail } from "@/components/mail-provider";
+import { disconnectText } from "@/lib/mail/labels";
 import { clearDocketCache, useDocket } from "@/components/use-docket";
 import {
   DECLINING,
@@ -45,6 +47,7 @@ export function DocketFeed({
   coachName: string;
   range: RangeId;
 }) {
+  const mail = useMail();
   const docket = useDocket(connectedEmail);
   const { result, loading, reload } = docket;
 
@@ -63,7 +66,7 @@ export function DocketFeed({
     const expired = result.status === "expired" || result.status === "not_connected";
     return (
       <StatePage connectedEmail={connectedEmail} onRefresh={reload} loading={loading}>
-        <p className="font-semibold">{expired ? "Gmail needs reconnecting" : "Couldn’t read Gmail"}</p>
+        <p className="font-semibold">{expired ? `${mail.name} needs reconnecting` : `Couldn’t read ${mail.name}`}</p>
         <p className="mt-1 text-sm text-muted">
           {expired
             ? "Google stopped accepting this connection (it expired or access was removed). Connect again to keep reading links."
@@ -71,10 +74,10 @@ export function DocketFeed({
         </p>
         {expired ? (
           <a
-            href="/api/auth/gmail/start"
+            href={mail.connectPath}
             className="mt-4 inline-block rounded-2xl bg-accent px-6 py-3 font-semibold text-accent-foreground"
           >
-            Reconnect Gmail
+            Reconnect {mail.name}
           </a>
         ) : (
           <button
@@ -150,6 +153,7 @@ function Feed({
   connectedEmail: string;
   coachName: string;
 }) {
+  const mail = useMail();
   const { loading, reload, reading, failed, retryInfo, updateEmail, removeEmail, restoreEmail } = docket;
   const { hours, phrase } = rangeFor(range);
 
@@ -295,7 +299,7 @@ function Feed({
 
   function deleted(email: DocketEmail) {
     removeEmail(email.id);
-    setToast({ message: "Deleted. It’s in your Gmail Trash." });
+    setToast({ message: `Deleted. It’s in ${mail.trash}.` });
   }
 
   function replied(email: DocketEmail, template: ReplyTemplate) {
@@ -445,8 +449,8 @@ type InfoProps = {
 // --- One card on its own (opened from search) --------------------------------------
 
 // Why a card opened from search isn't (or is) in the feed.
-function statusNote(card: CardStatus, inTrash: boolean) {
-  if (inTrash) return "Deleted: it’s in your Gmail Trash.";
+function statusNote(card: CardStatus, inTrash: boolean, trash: string) {
+  if (inTrash) return `Deleted: it’s in ${trash}.`;
   switch (card.kind) {
     case "skipped":
       return "Skipped: not in your feed.";
@@ -480,6 +484,7 @@ export function SingleCard({
   coachName: string;
   fromList: boolean;
 }) {
+  const mail = useMail();
   const router = useRouter();
   const [email, setEmail] = useState(initial);
   const [card, setCard] = useState(initialCard);
@@ -557,7 +562,7 @@ export function SingleCard({
     setToast({ message: "Reply sent" });
   }
 
-  const note = statusNote(card, trashed);
+  const note = statusNote(card, trashed, mail.trash);
   const cardCount = 1 + media.length;
 
   return (
@@ -583,7 +588,7 @@ export function SingleCard({
             onDeleted: () => {
               setTrashed(true);
               clearDocketCache();
-              setToast({ message: "Deleted. It’s in your Gmail Trash." });
+              setToast({ message: `Deleted. It’s in ${mail.trash}.` });
             },
             onShortlist: () => toggleShortlist(email),
             onShare: (text) => share(email, text),
@@ -866,6 +871,7 @@ function InfoCard({
   onReplied,
   statusNote,
 }: { email: DocketEmail; videoCount: number } & InfoProps) {
+  const mail = useMail();
   const [replying, setReplying] = useState<ReplyTemplate | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [unsharing, setUnsharing] = useState(false);
@@ -885,7 +891,7 @@ function InfoCard({
           <span className="rounded-full bg-accent px-2 py-0.5 font-semibold text-accent-foreground">Info</span>
           {email.inSpam && (
             <span className="rounded-full bg-yellow/20 px-2 py-0.5 font-semibold text-yellow-700 dark:text-yellow" data-found-in-spam>
-              Found in Spam
+              Found in {mail.spam}
             </span>
           )}
           {formatDate(email.date)}
@@ -1084,6 +1090,7 @@ function DeleteSheet({
   onClose: () => void;
   onDeleted: () => void;
 }) {
+  const mail = useMail();
   const [needsReconnect, setNeedsReconnect] = useState(!canDelete);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -1106,18 +1113,18 @@ function DeleteSheet({
     <Sheet onClose={() => !pending && onClose()}>
       <SheetTitle
         title="Delete this email?"
-        subtitle={`“${email.subject}” from ${email.from} will be removed from The Docket and moved to Trash in your Gmail. Gmail deletes it for good after 30 days.`}
+        subtitle={`“${email.subject}” from ${email.from} will be removed from The Docket and moved to ${mail.deleteTo}.${mail.deleteNote ? ` ${mail.deleteNote}` : ""}`}
       />
       {needsReconnect ? (
         <>
           <p className="text-center text-sm text-muted">
-            To delete emails, Briefcase needs permission to move them to your Gmail Trash. Reconnect once and allow it.
+            To delete emails, Briefcase needs permission to move them to {mail.trash}. Reconnect once and allow it.
           </p>
           <a
-            href="/api/auth/gmail/start"
+            href={mail.connectPath}
             className="block w-full rounded-2xl bg-accent py-3.5 text-center font-semibold text-accent-foreground"
           >
-            Reconnect Gmail
+            Reconnect {mail.name}
           </a>
           <SheetButton onClick={onClose}>Cancel</SheetButton>
         </>
@@ -1152,6 +1159,7 @@ function ReplySheet({
   onClose: () => void;
   onSent: () => void;
 }) {
+  const mail = useMail();
   const [body, setBody] = useState(() => buildReply(template, { info: email.info, senderName: email.from, coachName }));
   const [error, setError] = useState<string | null>(null);
   const [needsReconnect, setNeedsReconnect] = useState(!canSend);
@@ -1177,13 +1185,13 @@ function ReplySheet({
       {needsReconnect ? (
         <>
           <p className="text-center text-sm text-muted">
-            To send replies, Briefcase needs permission to send email from your Gmail. Reconnect once and allow it.
+            To send replies, Briefcase needs permission to send email from your {mail.name}. Reconnect once and allow it.
           </p>
           <a
-            href="/api/auth/gmail/start"
+            href={mail.connectPath}
             className="block w-full rounded-2xl bg-accent py-3.5 text-center font-semibold text-accent-foreground"
           >
-            Reconnect Gmail
+            Reconnect {mail.name}
           </a>
           <SheetButton onClick={onClose}>Cancel</SheetButton>
         </>
@@ -1196,7 +1204,7 @@ function ReplySheet({
             aria-label="Reply"
             className="w-full resize-none rounded-2xl border border-border bg-background px-4 py-3 text-[15px] leading-relaxed outline-none focus:border-accent"
           />
-          <p className="px-1 text-xs text-muted">Sent from your Gmail as a reply in the same conversation.</p>
+          <p className="px-1 text-xs text-muted">Sent from your {mail.name} as a reply in the same conversation.</p>
           {error && <p className="px-1 text-sm text-red">{error}</p>}
           <SheetButton variant="primary" disabled={sending || !body.trim()} onClick={send}>
             {sending ? "Sending…" : "Send reply"}
@@ -1378,6 +1386,7 @@ export function FeedMenu({
   loading: boolean;
   light?: boolean;
 }) {
+  const mail = useMail();
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1408,7 +1417,7 @@ export function FeedMenu({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        aria-label="Gmail options"
+        aria-label={`${mail.name} options`}
         className={`pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full text-xl leading-none ${
           light ? "bg-surface-muted text-foreground" : "bg-surface-muted/80 text-foreground backdrop-blur-sm"
         }`}
@@ -1420,12 +1429,12 @@ export function FeedMenu({
           {confirming ? (
             <>
               <SheetTitle
-                title="Disconnect Gmail?"
-                subtitle={`The Docket will stop reading ${connectedEmail}, and Briefcase’s access is cancelled at Google. You can connect again anytime.`}
+                title={`Disconnect ${mail.name}?`}
+                subtitle={disconnectText(mail.provider, connectedEmail)}
               />
               {error && <p className="px-1 text-sm text-red">{error}</p>}
               <SheetButton variant="danger" disabled={pending} onClick={disconnect}>
-                {pending ? "Disconnecting…" : "Disconnect Gmail"}
+                {pending ? "Disconnecting…" : `Disconnect ${mail.name}`}
               </SheetButton>
               <SheetButton disabled={pending} onClick={() => setConfirming(false)}>
                 Cancel
@@ -1433,7 +1442,7 @@ export function FeedMenu({
             </>
           ) : (
             <>
-              <SheetTitle title="Gmail" subtitle={`Reading ${connectedEmail}`} />
+              <SheetTitle title={mail.name} subtitle={`Reading ${connectedEmail}`} />
               <SheetButton
                 variant="primary"
                 disabled={loading}
@@ -1458,7 +1467,7 @@ export function FeedMenu({
               >
                 Shared with team
               </Link>
-              <SheetButton onClick={() => setConfirming(true)}>Disconnect Gmail</SheetButton>
+              <SheetButton onClick={() => setConfirming(true)}>Disconnect {mail.name}</SheetButton>
               <SheetButton onClick={close}>Close</SheetButton>
             </>
           )}

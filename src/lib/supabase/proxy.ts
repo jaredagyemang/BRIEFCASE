@@ -41,6 +41,12 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith(p),
   );
 
+  // A school's IT administrator returning from Microsoft's "approve for your
+  // organization" screen (they may not have a Briefcase login).
+  const adminConsent =
+    request.nextUrl.pathname === "/api/auth/outlook/callback" && request.nextUrl.searchParams.has("admin_consent");
+  if (adminConsent) return response;
+
   if (!signedIn && !onLogin && !onPasswordReset) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";

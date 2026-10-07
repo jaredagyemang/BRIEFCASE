@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useMail } from "@/components/mail-provider";
 import {
   cleanSearch,
   type CardStatus,
@@ -13,7 +14,7 @@ import {
 
 // The Docket's search: players' names (and senders and subjects) across every
 // Info card Briefcase has read for this coach, including ones that left the
-// feed, and, on request, the whole Gmail mailbox.
+// feed, and, on request, the whole mailbox (Gmail or Outlook).
 
 type GmailState =
   | { term: string; status: "searching" }
@@ -227,6 +228,7 @@ function GmailSection({
   failed: string[];
   onSearch: () => void;
 }) {
+  const mail = useMail();
   if (!state || state.status === "error") {
     return (
       <div className="mt-6 text-center">
@@ -237,7 +239,7 @@ function GmailSection({
           onClick={onSearch}
           className="mt-3 w-full rounded-2xl bg-accent py-3.5 font-semibold text-accent-foreground"
         >
-          Search Gmail for “{term}”
+          Search {mail.name} for “{term}”
         </button>
       </div>
     );
@@ -245,15 +247,15 @@ function GmailSection({
   if (state.status === "expired") {
     return (
       <div className="mt-6 rounded-3xl bg-surface px-6 py-6 text-center">
-        <p className="font-semibold">Gmail needs reconnecting</p>
+        <p className="font-semibold">{mail.name} needs reconnecting</p>
         <p className="mt-1 text-sm text-muted">
-          Google stopped accepting this connection. Connect again to search Gmail.
+          {mail.company} stopped accepting this connection. Connect again to search {mail.name}.
         </p>
         <a
-          href="/api/auth/gmail/start"
+          href={mail.connectPath}
           className="mt-4 inline-block rounded-2xl bg-accent px-6 py-3 font-semibold text-accent-foreground"
         >
-          Reconnect Gmail
+          Reconnect {mail.name}
         </a>
       </div>
     );
@@ -261,13 +263,13 @@ function GmailSection({
   if (state.status === "searching") {
     return (
       <p className="mt-6 flex items-center justify-center gap-2 text-sm text-muted" data-gmail-status="searching">
-        <Spinner /> Searching Gmail…
+        <Spinner /> Searching {mail.name}…
       </p>
     );
   }
   return (
     <div className="mt-6" data-gmail-results>
-      <h2 className="mb-2 px-1 text-sm font-semibold tracking-wide text-muted uppercase">Found in Gmail</h2>
+      <h2 className="mb-2 px-1 text-sm font-semibold tracking-wide text-muted uppercase">Found in {mail.name}</h2>
       {state.status === "reading" && (
         <p className="mb-2 flex items-center gap-2 px-1 text-sm text-muted" data-gmail-status="reading">
           <Spinner /> Reading {state.reading} {state.reading === 1 ? "email" : "emails"}…
@@ -277,11 +279,13 @@ function GmailSection({
         <ResultList results={results} reading={state.status === "reading"} failed={failed} />
       ) : (
         <div className="rounded-3xl bg-surface px-6 py-6 text-center" data-gmail-none>
-          <p className="font-semibold">{foundAny ? "Nothing new in Gmail" : "No matches in Gmail"}</p>
+          <p className="font-semibold">{foundAny ? `Nothing new in ${mail.name}` : `No matches in ${mail.name}`}</p>
           <p className="mt-1 text-sm text-muted">
             {foundAny
               ? `The emails with film links that mention “${term}” are already listed above.`
-              : `No emails with film links mention “${term}”. Gmail matches whole words, so try the full first or last name.`}
+              : mail.provider === "google"
+                ? `No emails with film links mention “${term}”. Gmail matches whole words, so try the full first or last name.`
+                : `No emails with film links mention “${term}”. Try the full first or last name.`}
           </p>
         </div>
       )}
