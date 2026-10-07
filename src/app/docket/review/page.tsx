@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { DocketFeed } from "@/components/docket-feed";
+import { MailProviderScope } from "@/components/mail-provider";
 import { getConnectionSummary } from "@/lib/gmail/connection";
 import { rangeFor } from "@/lib/gmail/docket-types";
 import { getCurrentUser } from "@/lib/staff";
@@ -10,10 +11,12 @@ export default async function DocketReviewPage({ searchParams }: PageProps<"/doc
   const [connection, user] = await Promise.all([getConnectionSummary(), getCurrentUser()]);
   if (!connection) redirect("/docket");
   return (
-    <DocketFeed
-      connectedEmail={connection.google_email}
-      coachName={user?.name ?? "Coach"}
-      range={rangeFor(typeof params.range === "string" ? params.range : null).id}
-    />
+    <MailProviderScope provider={connection.provider}>
+      <DocketFeed
+        connectedEmail={connection.google_email}
+        coachName={user?.name ?? "Coach"}
+        range={rangeFor(typeof params.range === "string" ? params.range : null).id}
+      />
+    </MailProviderScope>
   );
 }

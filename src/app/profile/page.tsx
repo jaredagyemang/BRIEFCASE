@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { signOut } from "@/app/login/actions";
-import { ProfileGmail } from "@/components/profile-gmail";
+import { ProfileEmail } from "@/components/profile-email";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { getConnectionSummary } from "@/lib/gmail/connection";
 import { getCurrentUser } from "@/lib/staff";
@@ -42,8 +42,8 @@ export default async function ProfilePage() {
       </div>
       <p className="mt-2 px-1 text-sm text-muted">Your name appears next to the ratings you make.</p>
 
-      <h2 className="mt-8 mb-2 px-1 text-sm font-semibold tracking-wide text-muted uppercase">Gmail</h2>
-      <ProfileGmail connectedEmail={gmail?.google_email ?? null} />
+      <h2 className="mt-8 mb-2 px-1 text-sm font-semibold tracking-wide text-muted uppercase">Email</h2>
+      <ProfileEmail connection={gmail ? { email: gmail.google_email, provider: gmail.provider } : null} />
       <p className="mt-2 px-1 text-sm text-muted">The Docket reads this inbox for recruiting emails with film.</p>
 
       <h2 className="mt-8 mb-2 px-1 text-sm font-semibold tracking-wide text-muted uppercase">

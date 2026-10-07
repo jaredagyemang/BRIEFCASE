@@ -2,12 +2,19 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { decryptToken, encryptToken } from "./crypto";
 import { GMAIL_READONLY, GmailUnauthorizedError, GoogleAuthError, refreshAccessToken, revokeToken, type GmailPart } from "./google";
+import { outlookCanRead, refreshOutlookToken } from "./outlook";
 
-// A coach's Gmail connection (one row in gmail_connections, readable only by
-// them). Tokens are decrypted only here, on the server, when needed.
+// A coach's email connection, Gmail or Outlook (one row in gmail_connections,
+// readable only by them; one mailbox at a time). Tokens are decrypted only
+// here, on the server, when needed.
+
+export type { MailProvider } from "@/lib/mail/labels";
+import type { MailProvider } from "@/lib/mail/labels";
 
 export type ConnectionRow = {
   staff_id: string;
+  provider: MailProvider;
+  // The connected address, Gmail or Outlook.
   google_email: string;
   refresh_token: string;
   access_token: string | null;
@@ -27,12 +34,15 @@ export async function getConnectionSummary() {
   const supabase = await createClient();
   const { data } = await supabase
     .from("gmail_connections")
-    .select("google_email, connected_at")
-    .maybeSingle<{ google_email: string; connected_at: string }>();
-  return data;
+    .select("google_email, connected_at, provider")
+    .maybeSingle<{ google_email: string; connected_at: string; provider: MailProvider }>();
+  return data ? { ...data, provider: data.provider ?? "google" } : null;
 }
 
+// Saves a new connection, replacing any earlier one (one mailbox at a time).
+// Switching away from Gmail also cancels Briefcase's access at Google.
 export async function saveConnection(tokens: {
+  provider: MailProvider;
   googleEmail: string;
   refreshToken: string;
   accessToken: string;
@@ -41,8 +51,21 @@ export async function saveConnection(tokens: {
 }) {
   const supabase = await createClient();
   const staffId = await signedInUserId(supabase);
+  const { data: previous } = await supabase
+    .from("gmail_connections")
+    .select("provider, refresh_token")
+    .eq("staff_id", staffId)
+    .maybeSingle<Pick<ConnectionRow, "provider" | "refresh_token">>();
+  if (previous && (previous.provider ?? "google") === "google" && tokens.provider !== "google") {
+    try {
+      await revokeToken(decryptToken(previous.refresh_token));
+    } catch (error) {
+      console.error("Couldn't revoke the replaced Gmail token", error);
+    }
+  }
   const { error } = await supabase.from("gmail_connections").upsert({
     staff_id: staffId,
+    provider: tokens.provider,
     google_email: tokens.googleEmail,
     refresh_token: encryptToken(tokens.refreshToken),
     access_token: encryptToken(tokens.accessToken),
@@ -50,19 +73,20 @@ export async function saveConnection(tokens: {
     scopes: tokens.scopes,
     connected_at: new Date().toISOString(),
   });
-  if (error) throw new Error(`Couldn't save the Gmail connection: ${error.message}`);
+  if (error) throw new Error(`Couldn't save the email connection: ${error.message}`);
 }
 
-// Cancels the app's access at Google and deletes the connection.
+// Deletes the connection. For Gmail, also cancels the app's access at Google
+// (Microsoft has no equivalent: coaches remove it in their Microsoft account).
 export async function disconnect() {
   const supabase = await createClient();
   const staffId = await signedInUserId(supabase);
   const { data: row } = await supabase
     .from("gmail_connections")
-    .select("refresh_token")
+    .select("refresh_token, provider")
     .eq("staff_id", staffId)
-    .maybeSingle<Pick<ConnectionRow, "refresh_token">>();
-  if (row) {
+    .maybeSingle<Pick<ConnectionRow, "refresh_token" | "provider">>();
+  if (row && (row.provider ?? "google") === "google") {
     try {
       await revokeToken(decryptToken(row.refresh_token));
     } catch (error) {
@@ -70,7 +94,7 @@ export async function disconnect() {
     }
   }
   const { error } = await supabase.from("gmail_connections").delete().eq("staff_id", staffId);
-  if (error) throw new Error(`Couldn't disconnect Gmail: ${error.message}`);
+  if (error) throw new Error(`Couldn't disconnect: ${error.message}`);
 }
 
 // A working access token, refreshed (and saved) when the stored one is about
@@ -80,14 +104,17 @@ async function accessToken(row: ConnectionRow, force = false) {
   const expiresAt = row.access_token_expires_at ? Date.parse(row.access_token_expires_at) : 0;
   if (!force && row.access_token && expiresAt - Date.now() > 60_000) return decryptToken(row.access_token);
 
-  const fresh = await refreshAccessToken(decryptToken(row.refresh_token));
+  const fresh =
+    row.provider === "microsoft"
+      ? await refreshOutlookToken(decryptToken(row.refresh_token))
+      : await refreshAccessToken(decryptToken(row.refresh_token));
   const supabase = await createClient();
   await supabase
     .from("gmail_connections")
     .update({
       access_token: encryptToken(fresh.access_token),
       access_token_expires_at: new Date(Date.now() + fresh.expires_in * 1000).toISOString(),
-      // Google may rotate the refresh token.
+      // Google may rotate the refresh token; Microsoft always does.
       ...(fresh.refresh_token ? { refresh_token: encryptToken(fresh.refresh_token) } : {}),
     })
     .eq("staff_id", row.staff_id);
@@ -99,24 +126,29 @@ async function accessToken(row: ConnectionRow, force = false) {
 export class ConnectionExpiredError extends Error {}
 
 // The signed-in coach's connection, or null if they haven't connected Gmail
-// (or it no longer includes read access).
+// or Outlook.
 export async function loadConnection() {
   const supabase = await createClient();
   const { data: row } = await supabase.from("gmail_connections").select("*").maybeSingle<ConnectionRow>();
   if (!row) return null;
-  return { supabase, row };
+  return { supabase, row: { ...row, provider: row.provider ?? "google" } as ConnectionRow };
 }
 
-// Runs fn with a working access token. If Gmail rejects a stored token, it's
-// refreshed once and fn retried. If the connection no longer works at all
-// (revoked, or expired after 7 days in Testing mode) it's removed and
-// ConnectionExpiredError thrown, so the coach is asked to reconnect.
-export async function withGmail<T>(
-  connection: NonNullable<Awaited<ReturnType<typeof loadConnection>>>,
-  fn: (token: string) => Promise<T>,
-): Promise<T> {
+export type Connection = NonNullable<Awaited<ReturnType<typeof loadConnection>>>;
+
+// Can this connection read mail? (Gmail's consent screen lets people untick
+// permissions; a connection without read access is treated as expired.)
+export const canRead = (row: ConnectionRow) =>
+  row.provider === "microsoft" ? outlookCanRead(row.scopes) : row.scopes.split(" ").includes(GMAIL_READONLY);
+
+// Runs fn with a working access token (Gmail or Outlook). If the mailbox
+// rejects a stored token, it's refreshed once and fn retried. If the
+// connection no longer works at all (revoked, or expired after 7 days in
+// Google's Testing mode) it's removed and ConnectionExpiredError thrown, so
+// the coach is asked to reconnect.
+export async function withMail<T>(connection: Connection, fn: (token: string) => Promise<T>): Promise<T> {
   const { supabase, row } = connection;
-  if (!row.scopes.split(" ").includes(GMAIL_READONLY)) throw new ConnectionExpiredError();
+  if (!canRead(row)) throw new ConnectionExpiredError();
   try {
     try {
       return await fn(await accessToken(row));

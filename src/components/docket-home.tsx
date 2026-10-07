@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { FeedMenu, StatePage } from "@/components/docket-feed";
 import { DocketSearch } from "@/components/docket-search";
+import { useMail } from "@/components/mail-provider";
 import { saveCheckSpam, useCheckSpam } from "@/components/docket-settings";
 import { StaffActivity } from "@/components/staff-activity";
 import { useDocket } from "@/components/use-docket";
@@ -40,19 +41,21 @@ function saveRange(id: RangeId) {
 // new emails), then start reviewing, or jump straight to the Shortlist; and
 // the team's activity in that range.
 export function DocketHome({ connectedEmail, notice }: { connectedEmail: string; notice?: string }) {
+  const mail = useMail();
   const { result, loading, reload, failed } = useDocket(connectedEmail);
   const range = rangeFor(useSyncExternalStore(subscribeRange, readRange, () => DEFAULT_RANGE));
   // Not when coming back to this screen later (e.g. from a card), after the
   // address was tidied up below.
   const [showNotice, setShowNotice] = useState(
-    () => Boolean(notice) && (typeof window === "undefined" || new URLSearchParams(window.location.search).has("gmail")),
+    () => Boolean(notice) && (typeof window === "undefined" || ["gmail", "outlook"].some((k) => new URLSearchParams(window.location.search).has(k))),
   );
-  // The message came from "?gmail=…"; drop that from the address so going
+  // The message came from "?gmail=…" or "?outlook=…"; drop that from the address so going
   // back here later doesn't show it again (keeping any search in it).
   useEffect(() => {
     if (!notice) return;
     const url = new URL(window.location.href);
     url.searchParams.delete("gmail");
+    url.searchParams.delete("outlook");
     window.history.replaceState(null, "", url.pathname + url.search);
   }, [notice]);
   useEffect(() => {
@@ -65,18 +68,18 @@ export function DocketHome({ connectedEmail, notice }: { connectedEmail: string;
     const expired = result.status === "expired" || result.status === "not_connected";
     return (
       <StatePage connectedEmail={connectedEmail} onRefresh={reload} loading={loading}>
-        <p className="font-semibold">{expired ? "Gmail needs reconnecting" : "Couldn’t read Gmail"}</p>
+        <p className="font-semibold">{expired ? `${mail.name} needs reconnecting` : `Couldn’t read ${mail.name}`}</p>
         <p className="mt-1 text-sm text-muted">
           {expired
-            ? "Google stopped accepting this connection (it expired or access was removed). Connect again to keep reading links."
+            ? `${mail.company} stopped accepting this connection (it expired or access was removed). Connect again to keep reading links.`
             : result.message}
         </p>
         {expired ? (
           <a
-            href="/api/auth/gmail/start"
+            href={mail.connectPath}
             className="mt-4 inline-block rounded-2xl bg-accent px-6 py-3 font-semibold text-accent-foreground"
           >
-            Reconnect Gmail
+            Reconnect {mail.name}
           </a>
         ) : (
           <button
@@ -203,17 +206,19 @@ export function DocketHome({ connectedEmail, notice }: { connectedEmail: string;
   );
 }
 
-// "Also check Spam": widens what's checked, not what's shown (only emails the
-// AI judges recruiting, or unsure, come through, marked "Found in Spam").
+// "Also check Spam" (Outlook: Junk): widens what's checked, not what's shown
+// (only emails the AI judges recruiting, or unsure, come through, marked
+// "Found in Spam").
 function SpamToggle() {
   const on = useCheckSpam() ?? false;
+  const mail = useMail();
   return (
     <div className="mt-3 flex items-center justify-between gap-4 rounded-2xl bg-surface px-4 py-3">
       <div className="min-w-0">
         <p id="check-spam" className="font-semibold">
-          Also check Spam
+          Also check {mail.spam}
         </p>
-        <p className="text-xs text-muted">Only recruiting emails come through, marked “Found in Spam”.</p>
+        <p className="text-xs text-muted">Only recruiting emails come through, marked “Found in {mail.spam}”.</p>
       </div>
       <button
         type="button"

@@ -59,6 +59,8 @@ export type DocketResult =
   | {
       status: "ok";
       googleEmail: string;
+      // Which mailbox: Gmail or Outlook.
+      provider: "google" | "microsoft";
       canSend: boolean;
       canDelete: boolean;
       emails: DocketEmail[];

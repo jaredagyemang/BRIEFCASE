@@ -17,10 +17,11 @@ const storageKey = (index: number) => `briefcase:mode:${MODES[index].id}`;
 function remember(index: number) {
   try {
     // Not one-off parameters: a player's "?tab=" (returning should land on the
-    // first tab) or a result message like The Docket's "?gmail=connected".
+    // first tab) or a result message like The Docket's "?gmail=connected" or "?outlook=connected".
     const params = new URLSearchParams(location.search);
     params.delete("tab");
     params.delete("gmail");
+    params.delete("outlook");
     const search = params.size ? `?${params}` : "";
     sessionStorage.setItem(storageKey(index), location.pathname + search);
   } catch {}

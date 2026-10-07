@@ -6,7 +6,7 @@ import {
   loadConnection,
   parseAddress,
   readableText,
-  withGmail,
+  withMail,
 } from "./connection";
 import {
   DECLINING,
@@ -26,17 +26,18 @@ import {
   type ReplyTemplate,
 } from "./docket-types";
 import { EXTRACTION_MODEL, extractInfo } from "./extract";
+import { GmailNotFoundError, GmailScopeError, type GmailMessage } from "./google";
 import {
-  GMAIL_MODIFY,
-  GMAIL_SEND,
-  GmailNotFoundError,
-  GmailScopeError,
-  getMessage,
-  listMessageIds,
-  sendMessage,
-  trashMessage,
-  type GmailMessage,
-} from "./google";
+  canDeleteMail,
+  canSendMail,
+  fetchMessage,
+  listRecent,
+  listSpam,
+  reply,
+  searchMailbox,
+  trash,
+  validMessageId,
+} from "./mailbox";
 import { extractLinks, uniqueMedia } from "./links";
 
 // The Docket: recent emails with film links, each with an Info card the AI
@@ -44,13 +45,8 @@ import { extractLinks, uniqueMedia } from "./links";
 
 export const LOOKBACK_DAYS = 30;
 export const MAX_EMAILS = 100;
-// Gmail search narrows the emails down; each one is then read to pull out the
-// actual links (search matches loosely, e.g. a mention of "youtube.com").
-const LINK_SITES = "{youtube.com youtu.be hudl.com veo.co docs.google.com}";
-const SEARCH = `newer_than:${LOOKBACK_DAYS}d ${LINK_SITES}`;
-// "Also check Spam": the same search in Spam, with its own limit so Spam
-// can't crowd out the inbox.
-const SPAM_SEARCH = `in:spam newer_than:${LOOKBACK_DAYS}d ${LINK_SITES}`;
+// "Also check Spam" (Gmail's Spam, Outlook's Junk Email): its own limit so
+// Spam can't crowd out the inbox.
 export const MAX_SPAM_EMAILS = 50;
 const ITEM_COLUMNS = "gmail_message_id, extraction, skipped_at, replied_at, reply_template, sender_name, email_date";
 
@@ -152,7 +148,7 @@ function inFeed(e: DocketEmail, item: ItemRow | undefined) {
 function failure(error: unknown): DocketResult {
   if (error instanceof ConnectionExpiredError) return { status: "expired" };
   console.error("Reading Gmail failed", error);
-  return { status: "error", message: error instanceof Error ? error.message : "Couldn't read Gmail." };
+  return { status: "error", message: error instanceof Error ? error.message : "Couldn't read your email." };
 }
 
 // --- The feed ------------------------------------------------------------------
@@ -166,13 +162,13 @@ export async function loadDocket({ spam = false }: { spam?: boolean } = {}): Pro
   if (!connection) return { status: "not_connected" };
   const { supabase, row } = connection;
   try {
-    const messages = await withGmail(connection, async (token) => {
+    const messages = await withMail(connection, async (token) => {
       const [inbox, fromSpam] = await Promise.all([
-        listMessageIds(token, SEARCH, MAX_EMAILS),
-        spam ? listMessageIds(token, SPAM_SEARCH, MAX_SPAM_EMAILS, true) : Promise.resolve([]),
+        listRecent(connection, token, LOOKBACK_DAYS, MAX_EMAILS),
+        spam ? listSpam(connection, token, LOOKBACK_DAYS, MAX_SPAM_EMAILS) : Promise.resolve([]),
       ]);
       const ids = [...new Set([...inbox, ...fromSpam])];
-      return inBatches(ids, 10, (id) => getMessage(token, id));
+      return inBatches(ids, 10, (id) => fetchMessage(connection, token, id));
     });
     const ids = messages.map((m) => m.id);
     const [{ data: items }, { data: shortlisted }, { data: shared }] = await Promise.all([
@@ -215,8 +211,9 @@ export async function loadDocket({ spam = false }: { spam?: boolean } = {}): Pro
     return {
       status: "ok",
       googleEmail: row.google_email,
-      canSend: row.scopes.split(" ").includes(GMAIL_SEND),
-      canDelete: row.scopes.split(" ").includes(GMAIL_MODIFY),
+      provider: row.provider,
+      canSend: canSendMail(row),
+      canDelete: canDeleteMail(row),
       emails,
       spamPending,
       scanned: messages.length,
@@ -255,7 +252,7 @@ export async function extractInfoCards(
   await Promise.all(
     todo.map(async (id) => {
       try {
-        const message = fetched?.get(id) ?? (await withGmail(connection, (token) => getMessage(token, id)));
+        const message = fetched?.get(id) ?? (await withMail(connection, (token) => fetchMessage(connection, token, id)));
         const { from, fromEmail, subject, date } = describe(message);
         const info = await extractInfo({
           from: fromEmail ? `${from} <${fromEmail}>` : from,
@@ -291,12 +288,12 @@ export async function checkSpamEmails(messageIds: string[]): Promise<DocketEmail
   const connection = await loadConnection();
   if (!connection) return [];
   const { supabase, row } = connection;
-  const ids = [...new Set(messageIds)].filter((id) => /^[\w-]{1,64}$/.test(id)).slice(0, 8);
+  const ids = [...new Set(messageIds)].filter(validMessageId).slice(0, 8);
   if (!ids.length) return [];
   let messages: GmailMessage[];
   try {
-    const found = await withGmail(connection, (token) =>
-      Promise.all(ids.map((id) => getMessage(token, id).catch(() => null))),
+    const found = await withMail(connection, (token) =>
+      Promise.all(ids.map((id) => fetchMessage(connection, token, id).catch(() => null))),
     );
     messages = found.filter((m): m is GmailMessage => Boolean(m && (m.labelIds ?? []).includes("SPAM")));
   } catch (error) {
@@ -326,7 +323,7 @@ export async function checkSpamEmails(messageIds: string[]): Promise<DocketEmail
 
 export async function setSkipped(messageId: string, threadId: string, skipped: boolean) {
   const connection = await loadConnection();
-  if (!connection) throw new Error("Gmail isn't connected.");
+  if (!connection) throw new Error("Your email isn't connected.");
   const { supabase, row } = connection;
   const { error } = await supabase.from("docket_items").upsert({
     staff_id: row.staff_id,
@@ -373,15 +370,16 @@ export async function sendReply(messageId: string, template: ReplyTemplate, body
   if (text.length > 10_000) return { ok: false, reason: "error", message: "That reply is too long." };
 
   const connection = await loadConnection();
-  if (!connection) return { ok: false, reason: "reconnect", message: "Connect Gmail to send replies." };
+  if (!connection) return { ok: false, reason: "reconnect", message: "Connect your email to send replies." };
   const { supabase, row } = connection;
-  if (!row.scopes.split(" ").includes(GMAIL_SEND)) {
-    return { ok: false, reason: "reconnect", message: "Reconnect Gmail to allow sending replies." };
+  const name = row.provider === "microsoft" ? "Outlook" : "Gmail";
+  if (!canSendMail(row)) {
+    return { ok: false, reason: "reconnect", message: `Reconnect ${name} to allow sending replies.` };
   }
 
   try {
-    const original = await withGmail(connection, (token) => getMessage(token, messageId));
-    await withGmail(connection, (token) => sendMessage(token, replyMime(original, text), original.threadId));
+    const original = await withMail(connection, (token) => fetchMessage(connection, token, messageId));
+    await withMail(connection, (token) => reply(connection, token, original, text, () => replyMime(original, text)));
     const { error } = await supabase.from("docket_items").upsert({
       staff_id: row.staff_id,
       gmail_message_id: messageId,
@@ -393,7 +391,7 @@ export async function sendReply(messageId: string, template: ReplyTemplate, body
     return { ok: true };
   } catch (error) {
     if (error instanceof GmailScopeError || error instanceof ConnectionExpiredError) {
-      return { ok: false, reason: "reconnect", message: "Reconnect Gmail to allow sending replies." };
+      return { ok: false, reason: "reconnect", message: `Reconnect ${name} to allow sending replies.` };
     }
     console.error("Sending reply failed", error);
     return { ok: false, reason: "error", message: "Couldn't send the reply. Try again." };
@@ -445,7 +443,7 @@ async function setOnList(
   force = false,
 ): Promise<ListResult> {
   const connection = await loadConnection();
-  if (!connection) throw new Error("Gmail isn't connected.");
+  if (!connection) throw new Error("Your email isn't connected.");
   const { supabase, row } = connection;
   const table = SNAPSHOT_TABLE[list];
 
@@ -494,7 +492,7 @@ async function setOnList(
   }
 
   // Other coaches can't see this inbox, so copy what they need to see.
-  const message = await withGmail(connection, (token) => getMessage(token, messageId));
+  const message = await withMail(connection, (token) => fetchMessage(connection, token, messageId));
   const { from, fromEmail, subject, date } = describe(message);
   const { error } = await supabase.from(table).upsert(
     {
@@ -534,19 +532,20 @@ export function emptyInfo(): DocketInfo {
 export type DeleteResult = { ok: true } | { ok: false; reason: "reconnect" | "error"; message: string };
 
 // Moves the email to the coach's Gmail Trash (Gmail deletes it for good after
-// 30 days) and takes it out of The Docket.
+// 30 days) or Outlook's Deleted Items, and takes it out of The Docket.
 export async function trashEmail(messageId: string, threadId: string): Promise<DeleteResult> {
   const connection = await loadConnection();
-  if (!connection) return { ok: false, reason: "reconnect", message: "Connect Gmail first." };
+  if (!connection) return { ok: false, reason: "reconnect", message: "Connect your email first." };
   const { supabase, row } = connection;
-  if (!row.scopes.split(" ").includes(GMAIL_MODIFY)) {
-    return { ok: false, reason: "reconnect", message: "Reconnect Gmail to allow deleting emails." };
+  const name = row.provider === "microsoft" ? "Outlook" : "Gmail";
+  if (!canDeleteMail(row)) {
+    return { ok: false, reason: "reconnect", message: `Reconnect ${name} to allow deleting emails.` };
   }
   try {
-    await withGmail(connection, (token) => trashMessage(token, messageId));
+    await withMail(connection, (token) => trash(connection, token, messageId));
   } catch (error) {
     if (error instanceof GmailScopeError || error instanceof ConnectionExpiredError) {
-      return { ok: false, reason: "reconnect", message: "Reconnect Gmail to allow deleting emails." };
+      return { ok: false, reason: "reconnect", message: `Reconnect ${name} to allow deleting emails.` };
     }
     console.error("Moving email to Trash failed", error);
     return { ok: false, reason: "error", message: "Couldn’t delete the email. Try again." };
@@ -558,7 +557,7 @@ export async function trashEmail(messageId: string, threadId: string): Promise<D
     gmail_thread_id: threadId,
     skipped_at: new Date().toISOString(),
   });
-  if (error) console.error("Deleted in Gmail but not recorded", error.message);
+  if (error) console.error("Deleted in the mailbox but not recorded", error.message);
   return { ok: true };
 }
 
@@ -617,9 +616,9 @@ export async function searchGmailCards(q: string): Promise<GmailSearchResult> {
   if (!connection) return { status: "expired" };
   const { supabase, row } = connection;
   try {
-    const found = await withGmail(connection, async (token) => {
-      const ids = await listMessageIds(token, `"${term}" ${LINK_SITES}`, 15);
-      return inBatches(ids, 10, (id) => getMessage(token, id));
+    const found = await withMail(connection, async (token) => {
+      const ids = await searchMailbox(connection, token, term, 15);
+      return inBatches(ids, 10, (id) => fetchMessage(connection, token, id));
     });
     const messages = found
       .filter((m) => extractLinks(bodyText(m.payload)).length > 0)
@@ -652,19 +651,19 @@ export async function searchGmailCards(q: string): Promise<GmailSearchResult> {
   } catch (error) {
     if (error instanceof ConnectionExpiredError) return { status: "expired" };
     console.error("Gmail search failed", error);
-    return { status: "error", message: "Couldn't search Gmail right now. Try again in a moment." };
+    return { status: "error", message: "Couldn't search your mailbox right now. Try again in a moment." };
   }
 }
 
 // One card on its own (opened from search): the email, its Info card, and
 // where it stands in the Docket.
 export async function loadDocketCard(messageId: string): Promise<CardResult> {
-  if (!/^[\w-]{1,64}$/.test(messageId)) return { status: "not_found" };
+  if (!validMessageId(messageId)) return { status: "not_found" };
   const connection = await loadConnection();
   if (!connection) return { status: "not_connected" };
   const { supabase, row } = connection;
   try {
-    const message = await withGmail(connection, (token) => getMessage(token, messageId));
+    const message = await withMail(connection, (token) => fetchMessage(connection, token, messageId));
     const { data: item } = await supabase
       .from("docket_items")
       .select(ITEM_COLUMNS)
@@ -678,8 +677,8 @@ export async function loadDocketCard(messageId: string): Promise<CardResult> {
       email,
       card: cardStatus(item ?? undefined, email.date),
       inTrash: (message.labelIds ?? []).includes("TRASH"),
-      canSend: row.scopes.split(" ").includes(GMAIL_SEND),
-      canDelete: row.scopes.split(" ").includes(GMAIL_MODIFY),
+      canSend: canSendMail(row),
+      canDelete: canDeleteMail(row),
     };
   } catch (error) {
     if (error instanceof GmailNotFoundError) return { status: "not_found" };
