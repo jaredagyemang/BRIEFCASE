@@ -15,6 +15,7 @@ import {
   type SnapshotList,
 } from "@/lib/gmail/docket";
 import type { ReplyTemplate } from "@/lib/gmail/docket-types";
+import { HINT_KEYS, markHintSeen, type HintKey } from "@/lib/hints";
 import { createAuthedClient } from "@/lib/supabase/server";
 
 // The Docket's server actions. Gmail tokens and email contents stay on the
@@ -72,4 +73,9 @@ export async function disconnectGmail() {
   await disconnect();
   revalidatePath("/docket");
   revalidatePath("/profile");
+}
+
+// A one-time hint in The Docket was dismissed (or no longer needed).
+export async function dismissHintAction(key: string) {
+  if ((HINT_KEYS as readonly string[]).includes(key)) await markHintSeen(key as HintKey);
 }

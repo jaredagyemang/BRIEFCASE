@@ -14,6 +14,7 @@ import {
 } from "@/app/docket/actions";
 import { PageScroller } from "@/components/page-scroller";
 import { Sheet, SheetButton, SheetTitle } from "@/components/sheet";
+import { DismissHint, useHint } from "@/components/hints";
 import { useMail } from "@/components/mail-provider";
 import { disconnectText } from "@/lib/mail/labels";
 import { clearDocketCache, useDocket } from "@/components/use-docket";
@@ -32,6 +33,7 @@ import {
 } from "@/lib/gmail/docket-types";
 import { PLATFORM_LABEL, googleDocPreview, uniqueMedia, youtubeVideo, type FoundLink } from "@/lib/gmail/links";
 import { TEMPLATE_LABEL, buildReply } from "@/lib/gmail/templates";
+import { HINTS } from "@/content/tutorial";
 import { timeAgo } from "@/lib/time";
 
 // The Docket's review feed, for the time range chosen on its home screen:
@@ -193,6 +195,15 @@ function Feed({
   const [cols, setCols] = useState<Record<string, number>>({});
   const activeCol = (current && cols[current.id]) ?? 0;
   const cardCount = 1 + (media.get(current?.id)?.length ?? 0);
+
+  // First-run hint on the first Info card: how to swipe. Swiping (or "Got
+  // it") puts it away for good.
+  const swipeHint = useHint("swipe");
+  const firstPosition = useRef(`${row}:${activeCol}`);
+  const { show: showSwipeHint, dismiss: dismissSwipeHint } = swipeHint;
+  useEffect(() => {
+    if (showSwipeHint && `${row}:${activeCol}` !== firstPosition.current) dismissSwipeHint();
+  }, [row, activeCol, showSwipeHint, dismissSwipeHint]);
 
   // Start on that player, before the first paint (no visible jump).
   useLayoutEffect(() => {
@@ -371,6 +382,7 @@ function Feed({
               onShare: (note) => share(email, note),
               onUnshare: () => unshare(email),
               onReplied: (template) => replied(email, template),
+              swipeHint: showSwipeHint ? { onDismiss: dismissSwipeHint } : null,
             }}
           />
         ))}
@@ -403,6 +415,7 @@ function Feed({
         )}
         <FeedMenu connectedEmail={connectedEmail} onRefresh={reload} loading={loading} />
       </div>
+
 
       {toast && (
         <div
@@ -444,6 +457,8 @@ type InfoProps = {
   // Shown at the top of the card (e.g. why a card opened from search isn't
   // in the feed).
   statusNote?: string | null;
+  // First-run hint on how to swipe (only in the feed, where up/down works).
+  swipeHint?: { onDismiss: () => void } | null;
 };
 
 // --- One card on its own (opened from search) --------------------------------------
@@ -870,8 +885,11 @@ function InfoCard({
   onUnshare,
   onReplied,
   statusNote,
+  swipeHint,
 }: { email: DocketEmail; videoCount: number } & InfoProps) {
   const mail = useMail();
+  // First-run hint: what Shortlist and Share to team are for.
+  const listsHint = useHint("lists");
   const [replying, setReplying] = useState<ReplyTemplate | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [unsharing, setUnsharing] = useState(false);
@@ -897,6 +915,18 @@ function InfoCard({
           {formatDate(email.date)}
           {info && <span className="ml-auto">Read by AI</span>}
         </p>
+        {swipeHint && (
+          <div
+            role="note"
+            className="mt-3 flex items-center gap-3 rounded-xl bg-accent/10 px-3 py-2 text-sm text-foreground ring-1 ring-accent/40"
+            data-hint="swipe"
+          >
+            <span className="flex-1">{HINTS.swipe}</span>
+            <button type="button" onClick={swipeHint.onDismiss} className="shrink-0 font-semibold text-accent-ink">
+              Got it
+            </button>
+          </div>
+        )}
         {statusNote && (
           <p role="note" className="mt-3 rounded-xl bg-surface-muted px-3 py-2 text-sm text-foreground/80" data-card-status>
             {statusNote}
@@ -974,6 +1004,16 @@ function InfoCard({
               </button>
             ))}
           </div>
+          {listsHint.show && (
+            <p
+              role="note"
+              className="mt-2 flex items-start gap-2 rounded-xl bg-accent/10 px-3 py-2 text-xs text-foreground ring-1 ring-accent/30"
+              data-hint="lists"
+            >
+              <span className="flex-1">{HINTS.lists}</span>
+              <DismissHint onClick={listsHint.dismiss} />
+            </p>
+          )}
           <div className="mt-2 grid grid-cols-2 gap-2">
             <button
               type="button"
