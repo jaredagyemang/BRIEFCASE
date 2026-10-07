@@ -88,3 +88,15 @@ test("the roster reader refuses SportsRecruits pages without connecting", async 
     await assert.rejects(fetchRosterPage(url), /doesn’t open SportsRecruits pages/);
   }
 });
+
+// The real shape of the link behind the profile button in a SportsRecruits
+// email (the username replaced): nothing after the username.
+test("the real link shape: recognised, opened as sent, saved unchanged", () => {
+  const REAL = "https://my.sportsrecruits.com/athlete/playername";
+  assert.deepEqual(classifyLink(REAL), { url: REAL, platform: "sportsrecruits" });
+  assert.equal(publicLink({ url: REAL, platform: "sportsrecruits" }).url, REAL);
+  const links = extractLinks(`<p>Coach, my profile: <a href="${REAL}">View profile</a></p><p>${REAL}/</p>`);
+  assert.deepEqual(profileLinks(links), [{ url: REAL, platform: "sportsrecruits" }], "with and without a trailing slash, one profile");
+  assert.deepEqual(swipeMedia(links), []);
+  assert.deepEqual(uniqueMedia(links).map(publicLink), [{ url: REAL, platform: "sportsrecruits" }]);
+});

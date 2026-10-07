@@ -19,7 +19,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   {
     visual: "docket",
     title: "The Docket: your inbox as a feed",
-    body: "Connect Gmail or Outlook. BRIEFCASE finds emails with YouTube, Hudl and Veo links and builds an Info Card for each player. Your Docket is yours alone.",
+    body: "Connect Gmail or Outlook. BRIEFCASE finds emails with YouTube, Hudl, Veo and SportsRecruits links and builds an Info Card for each player. Your Docket is yours alone.",
   },
   {
     visual: "swipes",
