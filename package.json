@@ -7,6 +7,7 @@
     "build": "next build && node scripts/check-browser-support.mjs",
     "start": "next start",
     "lint": "eslint",
+    "test": "node --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test 'tests/*.test.mjs'",
     "tint-fallbacks": "node scripts/tint-fallbacks.mjs",
     "check-browsers": "node scripts/check-browser-support.mjs"
   },

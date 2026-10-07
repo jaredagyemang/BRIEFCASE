@@ -1,6 +1,7 @@
-// Finds video (YouTube, Hudl, Veo) and Google Doc links in an email.
+// Finds video (YouTube, Hudl, Veo), Google Doc and SportsRecruits profile
+// links in an email.
 
-export type LinkPlatform = "youtube" | "hudl" | "veo" | "gdoc";
+export type LinkPlatform = "youtube" | "hudl" | "veo" | "gdoc" | "sportsrecruits";
 
 export type FoundLink = { url: string; platform: LinkPlatform };
 
@@ -9,6 +10,7 @@ export const PLATFORM_LABEL: Record<LinkPlatform, string> = {
   hudl: "Hudl",
   veo: "Veo",
   gdoc: "Google Doc",
+  sportsrecruits: "SportsRecruits",
 };
 
 const hostIs = (host: string, domain: string) => host === domain || host.endsWith(`.${domain}`);
@@ -50,7 +52,37 @@ export function classifyLink(raw: string): FoundLink | null {
   if (host === "docs.google.com" && path.startsWith("/document/")) {
     return { url: url.href, platform: "gdoc" };
   }
+  if (sportsRecruitsUser(url)) {
+    // Kept as sent, for the coach's own tap only (see publicLink).
+    return { url: url.href, platform: "sportsrecruits" };
+  }
   return null;
+}
+
+// --- SportsRecruits ------------------------------------------------------------
+// A player's SportsRecruits profile, e.g. my.sportsrecruits.com/athlete/<user>.
+// Briefcase never loads these pages itself (their terms don't allow
+// automated access, and a visit can tell the family a coach looked): the
+// coach opens the link with a tap.
+
+// The username in a SportsRecruits profile link, or null.
+function sportsRecruitsUser(url: URL) {
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  if (!hostIs(url.hostname.toLowerCase(), "sportsrecruits.com")) return null;
+  return url.pathname.match(/^\/athlete\/([A-Za-z0-9][A-Za-z0-9_.-]{0,99})\/?(?:[/?#]|$)/)?.[1] ?? null;
+}
+
+// The link as it may be saved and shared with other coaches. A SportsRecruits
+// link in an email can carry tracking and sign-in data for the coach it was
+// sent to, so only the plain public profile address is kept: no query string,
+// nothing after the username, no #fragment. Other links are unchanged.
+export function publicLink(link: FoundLink): FoundLink {
+  if (link.platform !== "sportsrecruits") return link;
+  let user: string | null = null;
+  try {
+    user = sportsRecruitsUser(new URL(link.url));
+  } catch {}
+  return { platform: "sportsrecruits", url: user ? `https://my.sportsrecruits.com/athlete/${user}` : "https://my.sportsrecruits.com/" };
 }
 
 // Links wrapped by Google's click tracking (google.com/url?q=…) are unwrapped
@@ -148,14 +180,24 @@ export function googleDocPreview(raw: string) {
   return m ? `https://docs.google.com/document/d/${m[1]}/preview` : null;
 }
 
-// A player's films, with the same YouTube video only once (e.g. a plain link
-// and a timestamped one).
+// A player's films, with the same YouTube video (e.g. a plain link and a
+// timestamped one) or SportsRecruits profile only once.
 export function uniqueMedia(links: FoundLink[]) {
   const seen = new Set<string>();
   return links.filter((link) => {
-    const key = link.platform === "youtube" ? (youtubeVideo(link.url)?.id ?? link.url) : link.url;
+    const key =
+      link.platform === "youtube"
+        ? (youtubeVideo(link.url)?.id ?? link.url)
+        : link.platform === "sportsrecruits"
+          ? publicLink(link).url.toLowerCase()
+          : link.url;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
 }
+
+// What the feed swipes through: films and documents. A SportsRecruits profile
+// isn't one; it's a button on the Info card instead.
+export const swipeMedia = (links: FoundLink[]) => uniqueMedia(links).filter((l) => l.platform !== "sportsrecruits");
+export const profileLinks = (links: FoundLink[]) => uniqueMedia(links).filter((l) => l.platform === "sportsrecruits");

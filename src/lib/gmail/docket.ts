@@ -38,7 +38,7 @@ import {
   trash,
   validMessageId,
 } from "./mailbox";
-import { extractLinks, uniqueMedia } from "./links";
+import { extractLinks, publicLink, uniqueMedia } from "./links";
 
 // The Docket: recent emails with film links, each with an Info card the AI
 // reads from the email, plus replies, skipping and the shared Shortlist.
@@ -503,7 +503,9 @@ async function setOnList(
       sender_email: fromEmail,
       subject,
       email_date: date,
-      links: uniqueMedia(extractLinks(bodyText(message.payload))),
+      // SportsRecruits links only as the plain public profile address, without
+      // the tracking or sign-in data an email's link can carry (publicLink).
+      links: uniqueMedia(extractLinks(bodyText(message.payload))).map(publicLink),
       added_by: row.staff_id,
       ...(list === "shared" && { note: note?.trim().slice(0, SHARE_NOTE_MAX) || null }),
     },

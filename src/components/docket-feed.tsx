@@ -31,7 +31,7 @@ import {
   type RangeId,
   type ReplyTemplate,
 } from "@/lib/gmail/docket-types";
-import { PLATFORM_LABEL, googleDocPreview, uniqueMedia, youtubeVideo, type FoundLink } from "@/lib/gmail/links";
+import { PLATFORM_LABEL, googleDocPreview, profileLinks, swipeMedia, youtubeVideo, type FoundLink } from "@/lib/gmail/links";
 import { TEMPLATE_LABEL, buildReply } from "@/lib/gmail/templates";
 import { timeAgo } from "@/lib/time";
 import { ConnectMailLink } from "@/components/connect-mail-link";
@@ -100,7 +100,8 @@ export function DocketFeed({
       <StatePage connectedEmail={connectedEmail} onRefresh={reload} loading={loading}>
         <p className="font-semibold">Nothing to watch yet</p>
         <p className="mt-1 text-sm text-muted">
-          No YouTube, Hudl, Veo or Google Doc links in your email from the last 30 days (or you’ve cleared them all).
+          No YouTube, Hudl, Veo, Google Doc or SportsRecruits links in your email from the last 30 days (or you’ve cleared
+          them all).
         </p>
         <button
           type="button"
@@ -182,7 +183,7 @@ function Feed({
   const pendingInRange = allEmails.filter((e) => !e.info && !failed.has(e.id) && inRange(e, hours)).length;
   const scrollerRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
-  const media = useMemo(() => new Map(emails.map((e) => [e.id, uniqueMedia(e.links)])), [emails]);
+  const media = useMemo(() => new Map(emails.map((e) => [e.id, swipeMedia(e.links)])), [emails]);
 
   const [activeRow, setActiveRow] = useState(() => {
     const i = lastPosition?.email === connectedEmail ? emails.findIndex((e) => e.id === lastPosition!.id) : -1;
@@ -449,7 +450,13 @@ function formatDate(iso: string | null) {
   return iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
 }
 
-const OPEN_LABEL = { youtube: "Open in YouTube", hudl: "Open in Hudl", veo: "Open in Veo", gdoc: "Open in Google Docs" };
+const OPEN_LABEL = {
+  youtube: "Open in YouTube",
+  hudl: "Open in Hudl",
+  veo: "Open in Veo",
+  gdoc: "Open in Google Docs",
+  sportsrecruits: "Open in SportsRecruits",
+};
 
 type InfoProps = {
   reading: boolean;
@@ -518,7 +525,7 @@ export function SingleCard({
   const [reading, setReading] = useState(!initial.info);
   const [failed, setFailed] = useState(false);
   const [col, setCol] = useState(0);
-  const media = useMemo(() => uniqueMedia(email.links), [email.links]);
+  const media = useMemo(() => swipeMedia(email.links), [email.links]);
 
   useEffect(() => {
     if (!toast) return;
@@ -939,6 +946,8 @@ function InfoCard({
   const [sharing, setSharing] = useState(false);
   const info = email.info;
   const pending = !info && !failed;
+  // The player's SportsRecruits profile (the first, if the email has more).
+  const profile = profileLinks(email.links)[0];
 
   // A card a little taller than the screen (a narrow phone, or large text)
   // scrolls by itself, so a flick up would only scroll its last few pixels
@@ -1048,6 +1057,23 @@ function InfoCard({
         </dl>
         {info?.more_players && (
           <p className="mt-2 text-xs text-muted">This email mentions more players; this card shows the first.</p>
+        )}
+
+        {/* Opened only when the coach taps it, never loaded by Briefcase. */}
+        {profile && (
+          <div className="mt-4" data-sportsrecruits>
+            <a
+              href={profile.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block w-full rounded-2xl bg-accent py-3.5 text-center font-semibold text-accent-foreground"
+            >
+              {OPEN_LABEL.sportsrecruits} ↗
+            </a>
+            {videoCount === 0 && (
+              <p className="mt-1.5 text-center text-xs text-muted">Their videos are on their SportsRecruits profile.</p>
+            )}
+          </div>
         )}
 
         <div className="mt-auto pt-4">

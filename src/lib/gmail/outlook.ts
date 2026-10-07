@@ -194,7 +194,7 @@ async function folders(accessToken: string): Promise<Folders> {
 
 // Outlook's search (KQL), narrowed to emails mentioning the film sites; each
 // email is then read to find the actual links, as with Gmail.
-const SITES = "(youtube.com OR youtu.be OR hudl.com OR veo.co OR docs.google.com)";
+const SITES = "(youtube.com OR youtu.be OR hudl.com OR veo.co OR docs.google.com OR sportsrecruits.com)";
 const since = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
 const kqlQuote = (s: string) => `"${s.replace(/["\\]/g, " ")}"`;
 

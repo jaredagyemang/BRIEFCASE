@@ -42,7 +42,7 @@ Fields:
 - budget: what the family can pay / the budget mentioned, exactly as written, whether a flat number or a range (e.g. "$25,000", "$20k–30k per year").
 - more_players: true if the email is about more than one recruit (then fill the fields for the first one only).
 - recruiting: is this email actually about recruiting?
-  - "yes": it's clearly recruiting-related: it introduces or recommends a player, shares a player's film or highlights, or expresses interest in the program or in playing in college (from the player, a parent, a club or high school coach, or a recruiting service).
+  - "yes": it's clearly recruiting-related: it introduces or recommends a player, shares a player's film or highlights, or expresses interest in the program or in playing in college (from the player, a parent, a club or high school coach, or a recruiting service). A message a player or parent sent through a recruiting platform such as SportsRecruits counts, even though the platform delivers it.
   - "no": it's clearly not: a newsletter, marketing, a platform or social notification, a receipt, a personal or unrelated work email that just happens to contain a video or document link.
   - "unsure": you genuinely can't tell (e.g. a forwarded link with no context, a vague message). Prefer "unsure" over "no" whenever there's a real chance a coach would want to see it: a wrongly hidden recruit is worse than an extra email to skip.
 
